@@ -107,6 +107,7 @@ interface HarnessOptions {
   readonly dispatchInterrupts?: boolean;
   readonly dispatchGate?: Effect.Effect<void>;
   readonly threadAttachedOnRecheck?: boolean;
+  readonly threadAttachedOnCall?: number;
   readonly threadArchivedOnRecheck?: boolean;
   readonly threadArchivedOnCall?: number;
   readonly threadDeletedOnCall?: number;
@@ -171,6 +172,7 @@ interface HarnessOptions {
   };
   readonly switchRefFails?: boolean;
   readonly switchRefFailsAfterMutation?: boolean;
+  readonly switchRefFailureBranch?: string | null;
   readonly switchRefRollbackFails?: boolean;
   readonly switchRefGate?: Effect.Effect<void>;
   readonly switchRefResultBranch?: string | null;
@@ -247,6 +249,15 @@ const makeHarness = (options: HarnessOptions = {}) => {
       thread !== null
     ) {
       return Effect.succeed(makeProjection({ ...thread, deletedAt: "2026-01-02T00:00:00.000Z" }));
+    }
+    if (
+      options.threadAttachedOnCall !== undefined &&
+      getThreadProjection.mock.calls.length >= options.threadAttachedOnCall &&
+      thread !== null
+    ) {
+      return Effect.succeed(
+        makeProjection({ ...thread, worktreePath: "/worktrees/project/raced" }),
+      );
     }
     if (
       options.threadAttachedOnRecheck === true &&
@@ -525,7 +536,13 @@ const makeHarness = (options: HarnessOptions = {}) => {
         Effect.suspend(() => {
           switchCallCount += 1;
           if (options.switchRefFailsAfterMutation === true && switchCallCount === 1) {
-            workspaceStatuses.set(input.cwd, { branch: input.refName, dirty: false });
+            workspaceStatuses.set(input.cwd, {
+              branch:
+                options.switchRefFailureBranch === undefined
+                  ? input.refName
+                  : options.switchRefFailureBranch,
+              dirty: false,
+            });
             return Effect.fail("simulated switch failure after mutation") as never;
           }
           if (
@@ -1931,9 +1948,33 @@ describe("t3_thread_checkout", () => {
     });
   });
 
+  it.effect("rechecks the caller binding after commit resolution and before Git mutation", () => {
+    const harness = makeHarness({
+      thread: { branch: "dev", worktreePath: null },
+      refs: rootRefs,
+      workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
+      threadAttachedOnCall: 3,
+    });
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runCheckout(harness, {
+          target: { type: "branch", branch: "feature/checkout" },
+        }),
+      );
+
+      expectTypedFailure(exit, {
+        _tag: "WorktreeMcpFailure",
+        code: "checkout_in_progress",
+      });
+      expect(harness.resolveCommit).toHaveBeenCalledTimes(2);
+      expect(harness.switchRef).not.toHaveBeenCalled();
+      expect(harness.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
   for (const [state, option] of [
-    ["archived", { threadArchivedOnCall: 3 }],
-    ["deleted", { threadDeletedOnCall: 3 }],
+    ["archived", { threadArchivedOnCall: 4 }],
+    ["deleted", { threadDeletedOnCall: 4 }],
   ] as const) {
     it.effect(`preserves Git state when the thread is ${state} before binding`, () => {
       const harness = makeHarness({
@@ -1987,7 +2028,7 @@ describe("t3_thread_checkout", () => {
     });
   });
 
-  it.effect("compare-and-deletes an owned created branch during rollback", () => {
+  it.effect("retains a created branch when a later binding operation fails", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
       refs: rootRefs,
@@ -2002,12 +2043,11 @@ describe("t3_thread_checkout", () => {
       );
 
       expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "operation_failed" });
-      expect(harness.deleteLocalBranch).toHaveBeenCalledWith({
+      expect(harness.switchRef).toHaveBeenNthCalledWith(2, {
         cwd: workspaceRoot,
-        refName: "feature/created-rollback",
-        force: true,
-        expectedCommitSha: "commit-test",
+        refName: "dev",
       });
+      expect(harness.deleteLocalBranch).not.toHaveBeenCalled();
     });
   });
 
@@ -2262,7 +2302,10 @@ describe("t3_thread_checkout", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
       refs: rootRefs,
-      workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
+      workspaceStatuses: {
+        [workspaceRoot]: { branch: "dev" },
+        [plainProjectRoot]: { branch: null, isRepo: false },
+      },
       worktreeInventoryFailsFor: new Set([plainProjectRoot]),
       otherProjectThread: {
         projectId: otherProjectId,
@@ -2280,6 +2323,39 @@ describe("t3_thread_checkout", () => {
 
       expect(result.current.actualBranch).toBe("feature/checkout");
       expect(harness.dispatch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it.effect("fails closed when a nested checkout owner's Git identity cannot be resolved", () => {
+    const nestedProjectRoot = "/repo/packages/server";
+    const otherProjectId = ProjectId.make("project-unresolved-nested-owner");
+    const harness = makeHarness({
+      thread: { branch: "dev", worktreePath: null },
+      refs: rootRefs,
+      workspaceStatuses: {
+        [workspaceRoot]: { branch: "dev" },
+        [nestedProjectRoot]: { branch: "dev", isRepo: true },
+      },
+      worktreeInventoryFailsFor: new Set([nestedProjectRoot]),
+      otherProjectThread: {
+        projectId: otherProjectId,
+        workspaceRoot: nestedProjectRoot,
+        id: ThreadId.make("thread-unresolved-nested-owner"),
+        title: "Unresolved nested owner",
+        branch: "dev",
+        worktreePath: null,
+      },
+    });
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runCheckout(harness, {
+          target: { type: "branch", branch: "feature/checkout" },
+        }),
+      );
+
+      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "operation_failed" });
+      expect(harness.switchRef).not.toHaveBeenCalled();
+      expect(harness.dispatch).not.toHaveBeenCalled();
     });
   });
 
@@ -2500,8 +2576,8 @@ describe("t3_thread_checkout", () => {
   });
 
   for (const [change, options] of [
-    ["a new commit", { resolvedCommits: ["before", "selected", "intervening"] }],
-    ["new dirty files", { dirtyOnLocalStatusCall: 4 }],
+    ["a new commit", { resolvedCommits: ["before", "selected", "selected", "intervening"] }],
+    ["new dirty files", { dirtyOnLocalStatusCall: 5 }],
   ] as const) {
     it.effect(`does not roll Git back over ${change}`, () => {
       const harness = makeHarness({
@@ -2549,12 +2625,40 @@ describe("t3_thread_checkout", () => {
     });
   });
 
+  it.effect("preserves unrelated Git state observed immediately after a failed switch", () => {
+    const harness = makeHarness({
+      thread: { branch: "dev", worktreePath: null },
+      refs: rootRefs,
+      workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
+      switchRefFailsAfterMutation: true,
+      switchRefFailureBranch: "feature/other-actor",
+      resolvedCommits: ["before", "requested", "other-actor"],
+    });
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runCheckout(harness, {
+          target: { type: "branch", branch: "feature/checkout" },
+        }),
+      );
+      expectTypedFailure(exit, {
+        _tag: "WorktreeMcpFailure",
+        code: "partial_failure",
+        partial: {
+          actualBranch: "feature/other-actor",
+          rollback: "not_possible",
+        },
+      });
+      expect(harness.switchRef).toHaveBeenCalledTimes(1);
+      expect(harness.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
   it.effect("preserves the switched branch when its resulting state cannot be verified", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
       refs: rootRefs,
       workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
-      localStatusFailsOnCall: 3,
+      localStatusFailsOnCall: 4,
     });
     return Effect.gen(function* () {
       const exit = yield* Effect.exit(

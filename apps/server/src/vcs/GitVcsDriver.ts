@@ -120,7 +120,6 @@ export interface GitDeleteLocalBranchInput {
   readonly cwd: string;
   readonly refName: string;
   readonly force?: boolean;
-  readonly expectedCommitSha?: string;
 }
 
 export interface GitPushResult {
