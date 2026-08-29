@@ -65,6 +65,23 @@ The **Source Control settings** page shows you exactly what's connected:
 
 Run a quick **Rescan** after setting up a new machine or changing credentials.
 
+### Let an agent change its checkout
+
+Agents running through T3 Code can inspect the checkout recorded on their thread and compare it
+with Git's actual branch. They can also list the project root and existing worktrees, including
+dirty state and other threads using each checkout.
+
+An agent can move its current thread to an existing branch, return to the project root, reuse an
+unclaimed worktree, or create a new worktree. T3 Code performs the Git operation before it updates
+the thread's saved branch and worktree path. It refuses to switch a dirty checkout and will not
+silently stash or discard files. It also refuses to take over a worktree owned by another thread or
+switch a shared root while another thread is bound there.
+
+Moving between workspace paths restarts the agent session in the selected checkout. The agent can
+queue a continuation before that restart, so longer work resumes without needing the browser to
+stay open. These controls apply only to the calling thread and its current project. They do not
+remove, prune, or revive worktrees.
+
 ## Getting Started
 
 ### For GitHub (Recommended for most users)

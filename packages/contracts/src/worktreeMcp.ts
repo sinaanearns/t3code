@@ -1,6 +1,13 @@
 import * as Schema from "effect/Schema";
 
-import { TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+
+const AbsolutePath = TrimmedNonEmptyString.check(
+  // Absolute POSIX (/...), Windows drive (C:\\ or C:/), or UNC (\\\\host).
+  Schema.isPattern(/^(?:[A-Za-z]:[\\/]|[\\/])/),
+);
+
+const ContinuationPrompt = TrimmedNonEmptyString.check(Schema.isMaxLength(120_000));
 
 /**
  * Input for the `t3_worktree_handoff` MCP tool.
@@ -27,10 +34,7 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
     }),
   ),
   path: Schema.optional(
-    TrimmedNonEmptyString.check(
-      // Absolute POSIX (/...), Windows drive (C:\ or C:/), or UNC (\\host).
-      Schema.isPattern(/^(?:[A-Za-z]:[\\/]|[\\/])/),
-    ).annotate({
+    AbsolutePath.annotate({
       description:
         "Absolute filesystem path for the new worktree. Relative paths are rejected. Defaults to the server-managed worktrees directory.",
     }),
@@ -42,7 +46,7 @@ export const WorktreeMcpHandoffInput = Schema.Struct({
     }),
   ),
   continuationPrompt: Schema.optional(
-    TrimmedNonEmptyString.check(Schema.isMaxLength(120_000)).annotate({
+    ContinuationPrompt.annotate({
       description:
         "Message queued as the thread's next turn after the handoff. The handoff detaches the current provider session, so pass the remaining work here to automatically resume inside the worktree; omit it to stop after the handoff and wait for the next message.",
     }),
@@ -95,6 +99,28 @@ export const WorktreeMcpHandoffResult = Schema.Struct({
 });
 export type WorktreeMcpHandoffResult = typeof WorktreeMcpHandoffResult.Type;
 
+export const WorktreeMcpRecordedWorkspace = Schema.Struct({
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type WorktreeMcpRecordedWorkspace = typeof WorktreeMcpRecordedWorkspace.Type;
+
+export const WorktreeMcpActualWorkspace = Schema.Struct({
+  workspacePath: TrimmedNonEmptyString,
+  isRepo: Schema.Boolean,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  hasWorkingTreeChanges: Schema.Boolean,
+});
+export type WorktreeMcpActualWorkspace = typeof WorktreeMcpActualWorkspace.Type;
+
+export const WorktreeMcpWorkspaceAgreement = Schema.Literals([
+  "in_sync",
+  "branch_mismatch",
+  "workspace_missing",
+  "not_repository",
+]);
+export type WorktreeMcpWorkspaceAgreement = typeof WorktreeMcpWorkspaceAgreement.Type;
+
 export const WorktreeMcpStatusResult = Schema.Struct({
   attached: Schema.Boolean.annotate({
     description: "True when this thread is already attached to a git worktree.",
@@ -107,8 +133,111 @@ export const WorktreeMcpStatusResult = Schema.Struct({
   defaultStartFromOrigin: Schema.Boolean.annotate({
     description: "Server default used by t3_worktree_handoff when startFromOrigin is omitted.",
   }),
+  recordedWorkspace: WorktreeMcpRecordedWorkspace,
+  actualWorkspace: WorktreeMcpActualWorkspace,
+  agreement: WorktreeMcpWorkspaceAgreement,
 });
 export type WorktreeMcpStatusResult = typeof WorktreeMcpStatusResult.Type;
+
+export const WorktreeMcpThreadBinding = Schema.Struct({
+  threadId: ThreadId,
+  title: Schema.String,
+  status: TrimmedNonEmptyString,
+  recordedBranch: Schema.NullOr(TrimmedNonEmptyString),
+  recordedWorktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  active: Schema.Boolean,
+  callingThread: Schema.Boolean,
+});
+export type WorktreeMcpThreadBinding = typeof WorktreeMcpThreadBinding.Type;
+
+export const WorktreeMcpListEntry = Schema.Struct({
+  path: TrimmedNonEmptyString,
+  branch: Schema.NullOr(TrimmedNonEmptyString),
+  actualBranch: Schema.NullOr(TrimmedNonEmptyString),
+  isRepo: Schema.Boolean,
+  isProjectRoot: Schema.Boolean,
+  hasWorkingTreeChanges: Schema.Boolean,
+  bindings: Schema.Array(WorktreeMcpThreadBinding),
+});
+export type WorktreeMcpListEntry = typeof WorktreeMcpListEntry.Type;
+
+export const WorktreeMcpListResult = Schema.Struct({
+  projectWorkspaceRoot: TrimmedNonEmptyString,
+  worktrees: Schema.Array(WorktreeMcpListEntry),
+});
+export type WorktreeMcpListResult = typeof WorktreeMcpListResult.Type;
+
+const CheckoutBranchTarget = Schema.Struct({
+  type: Schema.Literal("branch"),
+  branch: TrimmedNonEmptyString,
+  create: Schema.optional(Schema.Boolean),
+  workspace: Schema.optional(Schema.Literals(["auto", "current", "project_root"])),
+});
+
+const CheckoutWorktreeTarget = Schema.Struct({
+  type: Schema.Literal("worktree"),
+  path: AbsolutePath,
+});
+
+const CheckoutProjectRootTarget = Schema.Struct({
+  type: Schema.Literal("project_root"),
+  branch: Schema.optional(TrimmedNonEmptyString),
+  create: Schema.optional(Schema.Boolean),
+});
+
+const CheckoutNewWorktreeTarget = Schema.Struct({
+  type: Schema.Literal("new_worktree"),
+  branch: TrimmedNonEmptyString,
+  baseRef: Schema.optional(TrimmedNonEmptyString),
+  startFromOrigin: Schema.optional(Schema.Boolean),
+  path: Schema.optional(AbsolutePath),
+  runSetupScript: Schema.optional(Schema.Boolean),
+});
+
+export const WorktreeMcpCheckoutInput = Schema.Struct({
+  target: Schema.Union([
+    CheckoutBranchTarget,
+    CheckoutWorktreeTarget,
+    CheckoutProjectRootTarget,
+    CheckoutNewWorktreeTarget,
+  ]),
+  continuationPrompt: Schema.optional(
+    ContinuationPrompt.annotate({
+      description:
+        "Message queued as the thread's next turn when checkout changes the bound workspace and detaches the calling provider session.",
+    }),
+  ),
+});
+export type WorktreeMcpCheckoutInput = typeof WorktreeMcpCheckoutInput.Type;
+
+export const WorktreeMcpCheckoutSnapshot = Schema.Struct({
+  workspacePath: TrimmedNonEmptyString,
+  recordedBranch: Schema.NullOr(TrimmedNonEmptyString),
+  recordedWorktreePath: Schema.NullOr(TrimmedNonEmptyString),
+  actualBranch: Schema.NullOr(TrimmedNonEmptyString),
+});
+export type WorktreeMcpCheckoutSnapshot = typeof WorktreeMcpCheckoutSnapshot.Type;
+
+export const WorktreeMcpCheckoutResult = Schema.Struct({
+  previous: WorktreeMcpCheckoutSnapshot,
+  current: WorktreeMcpCheckoutSnapshot,
+  checkoutAction: Schema.Literals(["unchanged", "reused", "switched", "created"]),
+  workspaceChanged: Schema.Boolean,
+  branchChanged: Schema.Boolean,
+  continuation: WorktreeMcpContinuationStatus,
+  setupScript: WorktreeMcpSetupScriptStatus,
+  callerTurnEnds: Schema.Boolean,
+  note: Schema.String,
+});
+export type WorktreeMcpCheckoutResult = typeof WorktreeMcpCheckoutResult.Type;
+
+export const WorktreeMcpPartialFailure = Schema.Struct({
+  workspacePath: TrimmedNonEmptyString,
+  recordedBranch: Schema.NullOr(TrimmedNonEmptyString),
+  actualBranch: Schema.NullOr(TrimmedNonEmptyString),
+  rollback: Schema.Literals(["failed", "not_possible"]),
+});
+export type WorktreeMcpPartialFailure = typeof WorktreeMcpPartialFailure.Type;
 
 export class WorktreeMcpFailure extends Schema.TaggedErrorClass<WorktreeMcpFailure>()(
   "WorktreeMcpFailure",
@@ -119,9 +248,16 @@ export class WorktreeMcpFailure extends Schema.TaggedErrorClass<WorktreeMcpFailu
       "project_not_found",
       "already_in_worktree",
       "handoff_in_progress",
+      "checkout_in_progress",
       "invalid_request",
+      "scope_mismatch",
+      "dirty_workspace",
+      "workspace_in_use",
+      "workspace_shared",
+      "partial_failure",
       "operation_failed",
     ]),
     message: Schema.String,
+    partial: Schema.optional(WorktreeMcpPartialFailure),
   },
 ) {}
