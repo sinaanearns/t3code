@@ -62,6 +62,9 @@ export class GitWorkflowService extends Context.Service<
     readonly listRefs: (
       input: VcsListRefsInput,
     ) => Effect.Effect<VcsListRefsResult, GitCommandError>;
+    readonly listWorktrees: (
+      cwd: string,
+    ) => Effect.Effect<GitVcsDriver.GitWorktreeInventory, GitCommandError>;
     readonly createWorktree: (
       input: VcsCreateWorktreeInput,
     ) => Effect.Effect<VcsCreateWorktreeResult, GitCommandError>;
@@ -134,7 +137,6 @@ function nonRepositoryStatus(): VcsStatusResult {
 function nonRepositoryListRefs(): VcsListRefsResult {
   return {
     refs: [],
-    worktrees: [],
     isRepo: false,
     hasPrimaryRemote: false,
     nextCursor: null,
@@ -306,6 +308,10 @@ export const make = Effect.gen(function* () {
         Effect.flatMap((isGitRepository) =>
           isGitRepository ? git.listRefs(input) : Effect.succeed(nonRepositoryListRefs()),
         ),
+      ),
+    listWorktrees: (cwd) =>
+      ensureGitCommand("GitWorkflowService.listWorktrees", cwd).pipe(
+        Effect.andThen(git.listWorktrees(cwd)),
       ),
     createWorktree: (input) =>
       ensureGitCommand("GitWorkflowService.createWorktree", input.cwd).pipe(
