@@ -232,6 +232,17 @@ export interface GitRemoteStatusOptions {
   readonly refreshUpstream?: boolean;
 }
 
+export interface GitWorktreeCheckout {
+  readonly path: string;
+  readonly refName: string | null;
+}
+
+export interface GitWorktreeInventory {
+  readonly repositoryCommonDir: string;
+  readonly currentWorktreeRoot: string | null;
+  readonly worktrees: ReadonlyArray<GitWorktreeCheckout>;
+}
+
 export class GitVcsDriver extends Context.Service<
   GitVcsDriver,
   {
@@ -275,6 +286,7 @@ export class GitVcsDriver extends Context.Service<
     readonly listRefs: (
       input: VcsListRefsInput,
     ) => Effect.Effect<VcsListRefsResult, GitCommandError>;
+    readonly listWorktrees: (cwd: string) => Effect.Effect<GitWorktreeInventory, GitCommandError>;
     readonly pullCurrentBranch: (cwd: string) => Effect.Effect<VcsPullResult, GitCommandError>;
     readonly createWorktree: (
       input: VcsCreateWorktreeInput,
