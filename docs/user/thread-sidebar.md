@@ -25,6 +25,11 @@ Agents connected through T3 Code can organize threads too. They can pin, snooze,
 or change read state in the current project. T3 Code applies the same rules as the sidebar. For
 example, an agent cannot settle a thread while work or a user request is still pending.
 
+An agent can also ask T3 Code to settle or archive its own thread after the current run finishes.
+The request is saved by the server, but it is applied only when that run completes successfully
+and no newer, queued, or approval-blocked work remains. A new message or unresolved request keeps
+the thread visible and discards the stale organization request.
+
 If reordering is unavailable for one environment, update the T3 Code server running in that
 environment. Older servers can still pin and unpin threads, but do not understand synced ordering;
 their pinned threads keep the default newest-first order below the ones you have arranged.

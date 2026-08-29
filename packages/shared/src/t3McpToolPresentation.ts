@@ -21,6 +21,7 @@ const T3_MCP_TOOL_DISPLAY_NAMES: Record<string, string> = {
   t3_thread_list: "List T3 threads",
   t3_thread_read: "Read a T3 thread",
   t3_thread_organize: "Organize T3 threads",
+  t3_thread_defer_organization: "Defer thread organization",
   t3_thread_delete: "Delete a T3 thread",
   t3_thread_send: "Send to a T3 thread",
   t3_thread_wait: "Wait for a T3 thread",
