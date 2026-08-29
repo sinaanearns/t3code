@@ -121,6 +121,7 @@ interface HarnessOptions {
   readonly createWorktreeFails?: boolean;
   readonly fetchRemoteFails?: boolean;
   readonly resolveRemoteFails?: boolean;
+  readonly resolvedCommits?: ReadonlyArray<string>;
   readonly removeWorktreeFails?: boolean;
   readonly deleteLocalBranchFails?: boolean;
   readonly createWorktreeGate?: Effect.Effect<void>;
@@ -144,6 +145,7 @@ interface HarnessOptions {
   >;
   readonly worktreeInventoryFailsFor?: ReadonlySet<string>;
   readonly localStatusFailsOnCall?: number;
+  readonly dirtyOnLocalStatusCall?: number;
   readonly projectThreads?: ReadonlyArray<{
     readonly id: ThreadId;
     readonly title: string;
@@ -402,6 +404,15 @@ const makeHarness = (options: HarnessOptions = {}) => {
       ? (Effect.fail("simulated remote resolve failure") as never)
       : Effect.succeed({ commitSha: "abc123", remoteRefName: "origin/dev" }),
   );
+  let resolveCommitCallCount = 0;
+  const resolveCommit = vi.fn((_: unknown) => {
+    const commitSha =
+      options.resolvedCommits?.[
+        Math.min(resolveCommitCallCount, (options.resolvedCommits?.length ?? 1) - 1)
+      ] ?? "commit-test";
+    resolveCommitCallCount += 1;
+    return Effect.succeed({ commitSha });
+  });
   const workspaceStatuses = new Map(
     Object.entries(
       options.workspaceStatuses ?? {
@@ -502,7 +513,8 @@ const makeHarness = (options: HarnessOptions = {}) => {
             ? "dev"
             : options.currentBranch
           : current.branch,
-      hasWorkingTreeChanges: current?.dirty ?? false,
+      hasWorkingTreeChanges:
+        options.dirtyOnLocalStatusCall === localStatusCallCount ? true : (current?.dirty ?? false),
       workingTree: { files: [], insertions: 0, deletions: 0 },
     });
   });
@@ -615,6 +627,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
         invalidateLocalStatus,
         fetchRemote,
         resolveRemoteTrackingCommit,
+        resolveCommit,
         createWorktree,
         removeWorktree,
         deleteLocalBranch,
@@ -656,6 +669,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
     sendToThread,
     fetchRemote,
     resolveRemoteTrackingCommit,
+    resolveCommit,
     createWorktree,
     removeWorktree,
     deleteLocalBranch,
@@ -907,6 +921,7 @@ describe("t3_worktree_handoff", () => {
         worktreePath: "/worktrees/project/feature/second",
         expectedBranch: "feature/existing",
         expectedWorktreePath: "/worktrees/project/existing",
+        expectedArchived: false,
       });
     });
   });
@@ -1817,6 +1832,46 @@ describe("t3_thread_checkout", () => {
     },
   );
 
+  it.effect("records a verified detached checkout of an explicit remote ref", () => {
+    const remoteCommit = "remote-feature-commit";
+    const harness = makeHarness({
+      thread: { branch: "feature", worktreePath: null },
+      refs: [
+        {
+          name: "feature",
+          current: true,
+          isDefault: false,
+          worktreePath: workspaceRoot,
+        },
+        {
+          name: "origin/feature",
+          current: false,
+          isDefault: false,
+          isRemote: true,
+          worktreePath: null,
+        },
+      ],
+      workspaceStatuses: { [workspaceRoot]: { branch: "feature" } },
+      switchRefResultBranch: null,
+      resolvedCommits: ["local-feature-commit", remoteCommit, remoteCommit],
+    });
+    return Effect.gen(function* () {
+      const result = yield* runCheckout(harness, {
+        target: { type: "branch", branch: "origin/feature" },
+      });
+
+      expect(result.checkoutAction).toBe("switched");
+      expect(result.current).toMatchObject({ recordedBranch: null, actualBranch: null });
+      expect(harness.dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "thread.metadata.update",
+          branch: null,
+          expectedArchived: false,
+        }),
+      );
+    });
+  });
+
   it.effect("refuses to bind when Git changes again after resolving the requested ref", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
@@ -1848,7 +1903,7 @@ describe("t3_thread_checkout", () => {
     ["archived", { threadArchivedOnCall: 3 }],
     ["deleted", { threadDeletedOnCall: 3 }],
   ] as const) {
-    it.effect(`rolls Git back when the thread is ${state} before binding`, () => {
+    it.effect(`preserves Git state when the thread is ${state} before binding`, () => {
       const harness = makeHarness({
         thread: { branch: "dev", worktreePath: null },
         refs: rootRefs,
@@ -1863,12 +1918,10 @@ describe("t3_thread_checkout", () => {
         );
         expectTypedFailure(exit, {
           _tag: "WorktreeMcpFailure",
-          code: "checkout_in_progress",
+          code: "partial_failure",
+          partial: { actualBranch: "feature/checkout", rollback: "not_possible" },
         });
-        expect(harness.switchRef).toHaveBeenNthCalledWith(2, {
-          cwd: workspaceRoot,
-          refName: "dev",
-        });
+        expect(harness.switchRef).toHaveBeenCalledTimes(1);
         expect(harness.dispatch).not.toHaveBeenCalled();
         expect(harness.sendToThread).not.toHaveBeenCalled();
       });
@@ -1898,6 +1951,30 @@ describe("t3_thread_checkout", () => {
       expect(harness.switchRef).toHaveBeenCalledWith({
         cwd: workspaceRoot,
         refName: "feature/created",
+      });
+    });
+  });
+
+  it.effect("compare-and-deletes an owned created branch during rollback", () => {
+    const harness = makeHarness({
+      thread: { branch: "dev", worktreePath: null },
+      refs: rootRefs,
+      workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
+      dispatchFails: true,
+    });
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runCheckout(harness, {
+          target: { type: "branch", branch: "feature/created-rollback", create: true },
+        }),
+      );
+
+      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "operation_failed" });
+      expect(harness.deleteLocalBranch).toHaveBeenCalledWith({
+        cwd: workspaceRoot,
+        refName: "feature/created-rollback",
+        force: true,
+        expectedCommitSha: "commit-test",
       });
     });
   });
@@ -2147,6 +2224,33 @@ describe("t3_thread_checkout", () => {
     });
   });
 
+  it.effect("ignores an unrelated plain-directory project while checking workspace owners", () => {
+    const plainProjectRoot = "/plain/unrelated-project";
+    const otherProjectId = ProjectId.make("project-plain-directory");
+    const harness = makeHarness({
+      thread: { branch: "dev", worktreePath: null },
+      refs: rootRefs,
+      workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
+      worktreeInventoryFailsFor: new Set([plainProjectRoot]),
+      otherProjectThread: {
+        projectId: otherProjectId,
+        workspaceRoot: plainProjectRoot,
+        id: ThreadId.make("thread-plain-directory"),
+        title: "Plain directory thread",
+        branch: null,
+        worktreePath: null,
+      },
+    });
+    return Effect.gen(function* () {
+      const result = yield* runCheckout(harness, {
+        target: { type: "branch", branch: "feature/checkout" },
+      });
+
+      expect(result.current.actualBranch).toBe("feature/checkout");
+      expect(harness.dispatch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it.effect("rejects a physical worktree retained by an archived thread", () => {
     const targetPath = "/worktrees/project/archived-owner";
     const harness = makeHarness({
@@ -2363,6 +2467,34 @@ describe("t3_thread_checkout", () => {
     });
   });
 
+  for (const [change, options] of [
+    ["a new commit", { resolvedCommits: ["before", "selected", "intervening"] }],
+    ["new dirty files", { dirtyOnLocalStatusCall: 4 }],
+  ] as const) {
+    it.effect(`does not roll Git back over ${change}`, () => {
+      const harness = makeHarness({
+        thread: { branch: "dev", worktreePath: null },
+        refs: rootRefs,
+        workspaceStatuses: { [workspaceRoot]: { branch: "dev" } },
+        dispatchFails: true,
+        ...options,
+      });
+      return Effect.gen(function* () {
+        const exit = yield* Effect.exit(
+          runCheckout(harness, {
+            target: { type: "branch", branch: "feature/checkout" },
+          }),
+        );
+        expectTypedFailure(exit, {
+          _tag: "WorktreeMcpFailure",
+          code: "partial_failure",
+          partial: { actualBranch: "feature/checkout", rollback: "not_possible" },
+        });
+        expect(harness.switchRef).toHaveBeenCalledTimes(1);
+      });
+    });
+  }
+
   it.effect("rolls back when checkout reports failure after changing the branch", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
@@ -2385,7 +2517,7 @@ describe("t3_thread_checkout", () => {
     });
   });
 
-  it.effect("rolls back when the switched branch cannot be verified", () => {
+  it.effect("preserves the switched branch when its resulting state cannot be verified", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
       refs: rootRefs,
@@ -2398,11 +2530,12 @@ describe("t3_thread_checkout", () => {
           target: { type: "branch", branch: "feature/checkout" },
         }),
       );
-      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "operation_failed" });
-      expect(harness.switchRef).toHaveBeenNthCalledWith(2, {
-        cwd: workspaceRoot,
-        refName: "dev",
+      expectTypedFailure(exit, {
+        _tag: "WorktreeMcpFailure",
+        code: "partial_failure",
+        partial: { actualBranch: null, rollback: "not_possible" },
       });
+      expect(harness.switchRef).toHaveBeenCalledTimes(1);
       expect(harness.dispatch).not.toHaveBeenCalled();
     });
   });
