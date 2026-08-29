@@ -20,6 +20,7 @@ const T3_MCP_TOOL_DISPLAY_NAMES: Record<string, string> = {
   t3_thread_start: "Start a T3 thread",
   t3_thread_list: "List T3 threads",
   t3_thread_read: "Read a T3 thread",
+  t3_thread_update: "Update T3 thread metadata",
   t3_thread_send: "Send to a T3 thread",
   t3_thread_wait: "Wait for a T3 thread",
   t3_thread_interrupt: "Interrupt a T3 thread",

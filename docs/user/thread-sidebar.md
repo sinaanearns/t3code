@@ -35,3 +35,7 @@ pill** fallback because their colors are not controlled by T3 Code.
 To generate a fresh title from the conversation, open a thread's context menu and choose
 **Regenerate title**. While T3 Code is generating it, the action reads **Regenerating…** and cannot
 be selected again. The option is hidden when the connected environment needs a server update.
+
+Agents connected through T3 Code can use the same server-owned metadata workflow to rename a
+thread, regenerate its title, or link and unlink a pull request. These changes appear on web,
+desktop, and mobile without requiring the originating browser to remain open.
