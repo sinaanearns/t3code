@@ -2048,6 +2048,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
             }),
         ),
       );
+    if (sourceProjection.thread.deletedAt !== null) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Fork source thread ${command.sourceThreadId} is deleted.`,
+      });
+    }
 
     const sourceRun = runForSourcePoint(sourceProjection, command.sourcePoint);
 
@@ -4495,6 +4502,13 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               }),
           ),
         );
+      if (parentProjection.thread.deletedAt !== null) {
+        return yield* new OrchestratorDispatchError({
+          commandId: command.commandId,
+          commandType: command.type,
+          cause: `Delegated task parent thread ${command.parentThreadId} is deleted.`,
+        });
+      }
       const parentRun = parentProjection.runs.find(
         (candidate) => candidate.id === command.parentRunId,
       );

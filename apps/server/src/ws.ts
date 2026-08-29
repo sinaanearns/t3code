@@ -1196,30 +1196,35 @@ const makeWsRpcLayer = (
               ...(mutation.scripts === undefined ? {} : { scripts: mutation.scripts }),
             });
           case "project.delete": {
-            const snapshot = yield* threadManagement.getShellSnapshot();
-            const projectThreads = [...snapshot.threads, ...snapshot.archivedThreads].filter(
-              (thread) => thread.projectId === mutation.projectId,
+            return yield* threadManagement.withProjectMutationLock(
+              mutation.projectId,
+              Effect.gen(function* () {
+                const snapshot = yield* threadManagement.getShellSnapshot();
+                const projectThreads = [...snapshot.threads, ...snapshot.archivedThreads].filter(
+                  (thread) => thread.projectId === mutation.projectId,
+                );
+                if (projectThreads.length > 0 && mutation.force !== true) {
+                  return yield* new ProjectMutationError({
+                    commandId: mutation.commandId,
+                    message: `Project ${mutation.projectId} is not empty.`,
+                  });
+                }
+                yield* Effect.forEach(
+                  projectThreads,
+                  (thread) =>
+                    threadManagement.dispatch({
+                      type: "thread.delete",
+                      commandId: CommandId.make(`${mutation.commandId}:delete-thread:${thread.id}`),
+                      threadId: thread.id,
+                    }),
+                  { concurrency: 1, discard: true },
+                );
+                return yield* projectService.delete({
+                  commandId: mutation.commandId,
+                  projectId: mutation.projectId,
+                });
+              }),
             );
-            if (projectThreads.length > 0 && mutation.force !== true) {
-              return yield* new ProjectMutationError({
-                commandId: mutation.commandId,
-                message: `Project ${mutation.projectId} is not empty.`,
-              });
-            }
-            yield* Effect.forEach(
-              projectThreads,
-              (thread) =>
-                threadManagement.dispatch({
-                  type: "thread.delete",
-                  commandId: CommandId.make(`${mutation.commandId}:delete-thread:${thread.id}`),
-                  threadId: thread.id,
-                }),
-              { concurrency: 1, discard: true },
-            );
-            return yield* projectService.delete({
-              commandId: mutation.commandId,
-              projectId: mutation.projectId,
-            });
           }
         }
       });
