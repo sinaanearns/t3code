@@ -65,6 +65,14 @@ The **Source Control settings** page shows you exactly what's connected:
 
 Run a quick **Rescan** after setting up a new machine or changing credentials.
 
+### Let an agent inspect its checkout
+
+Agents running through T3 Code can inspect the checkout recorded on their thread and compare it
+with Git's actual branch. They can also list the project root and existing worktrees, including
+dirty state and the durable branch and worktree path recorded for other threads using each
+checkout. These read paths apply only to the calling thread's current project and do not create,
+remove, prune, or revive worktrees.
+
 ## Getting Started
 
 ### For GitHub (Recommended for most users)
