@@ -35,6 +35,10 @@ import { layer as orchestratorLayer } from "../Orchestrator.ts";
 import { layer as projectionStoreLayer } from "../ProjectionStore.ts";
 import { OrchestratorV2, type OrchestratorV2Error } from "../Orchestrator.ts";
 import { ProviderAdapterRegistryV2 } from "../ProviderAdapterRegistry.ts";
+import {
+  ProviderRuntimeRecoveryService,
+  layer as providerRuntimeRecoveryLayer,
+} from "../ProviderRuntimeRecoveryService.ts";
 import { layer as providerEventIngestorLayer } from "../ProviderEventIngestor.ts";
 import { layerWithOptions as providerSessionManagerLayerWithOptions } from "../ProviderSessionManager.ts";
 import { layer as providerSwitchServiceLayer } from "../ProviderSwitchService.ts";
@@ -218,7 +222,10 @@ export function makeOrchestratorV2ProviderReplayLayer<
     readonly runEffectWorker?: boolean;
     readonly replayGate?: ProviderReplayGate;
   } = {},
-): Layer.Layer<OrchestratorV2, Error | MigrationError | PlatformError.PlatformError | SqlError> {
+): Layer.Layer<
+  OrchestratorV2 | ProviderRuntimeRecoveryService,
+  Error | MigrationError | PlatformError.PlatformError | SqlError
+> {
   const registryLayer = harness.makeProviderAdapterRegistryLayer(
     scenario.transcript,
     options.replayGate === undefined ? {} : { replayGate: options.replayGate },
@@ -237,7 +244,10 @@ export function makeOrchestratorV2ReplayLayerWithRegistry<Error>(
     readonly enableLegacyTokenStreaming?: boolean;
     readonly runEffectWorker?: boolean;
   } = {},
-): Layer.Layer<OrchestratorV2, Error | MigrationError | PlatformError.PlatformError | SqlError> {
+): Layer.Layer<
+  OrchestratorV2 | ProviderRuntimeRecoveryService,
+  Error | MigrationError | PlatformError.PlatformError | SqlError
+> {
   const serverConfigLayer = Layer.effect(
     ServerConfig,
     makeReplayServerConfig(scenario.name).pipe(Effect.orDie),
@@ -390,15 +400,24 @@ export function makeOrchestratorV2ReplayLayerWithRegistry<Error>(
       ),
     ),
   );
-  const replayRuntime = Layer.merge(orchestratorProvided, effectWorkerProvided);
+  const providerRuntimeRecoveryProvided = providerRuntimeRecoveryLayer.pipe(
+    Layer.provide(
+      Layer.mergeAll(effectWorkerProvided, storesLayer, eventSinkProvided, idAllocatorLayer),
+    ),
+  );
+  const replayRuntime = Layer.mergeAll(
+    orchestratorProvided,
+    effectWorkerProvided,
+    providerRuntimeRecoveryProvided,
+  );
 
   // Build the daemon from the exact worker instance exposed alongside the
   // orchestrator. Keeping this acquisition in the replay layer makes the
   // outbox lifecycle explicit and prevents test-only command-side draining.
   if (options.runEffectWorker === false) {
-    return orchestratorProvided;
+    return Layer.merge(orchestratorProvided, providerRuntimeRecoveryProvided);
   }
-  return Layer.effect(
+  const orchestratorWithWorker = Layer.effect(
     OrchestratorV2,
     Effect.gen(function* () {
       const orchestrator = yield* OrchestratorV2;
@@ -406,4 +425,5 @@ export function makeOrchestratorV2ReplayLayerWithRegistry<Error>(
       return orchestrator;
     }),
   ).pipe(Layer.provide(replayRuntime));
+  return Layer.merge(orchestratorWithWorker, providerRuntimeRecoveryProvided);
 }
