@@ -196,5 +196,18 @@ describe("orchestrator MCP contracts", () => {
         })),
       }),
     ).toThrow();
+    expect(() => decodeThreadOrganizeInput({})).toThrow();
+    expect(() =>
+      decodeThreadOrganizeInput({
+        action: { type: "settle" },
+        items: [{ threadId: "thread-a", action: { type: "unpin" } }],
+      }),
+    ).toThrow();
+    expect(() =>
+      decodeThreadOrganizeInput({
+        threadId: "thread-a",
+        items: [{ threadId: "thread-b", action: { type: "unpin" } }],
+      }),
+    ).toThrow();
   });
 });
