@@ -133,7 +133,10 @@ interface HarnessOptions {
   }>;
   readonly projectWorktreeRoot?: string;
   readonly workspaceAliases?: Readonly<Record<string, string>>;
-  readonly workspaceStatuses?: Readonly<Record<string, { branch: string | null; dirty?: boolean }>>;
+  readonly workspaceStatuses?: Readonly<
+    Record<string, { branch: string | null; dirty?: boolean; isRepo?: boolean }>
+  >;
+  readonly worktreeInventoryFailsFor?: ReadonlySet<string>;
   readonly localStatusFailsOnCall?: number;
   readonly projectThreads?: ReadonlyArray<{
     readonly id: ThreadId;
@@ -151,6 +154,12 @@ interface HarnessOptions {
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly active?: boolean;
+  };
+  readonly archivedProjectThread?: {
+    readonly id: ThreadId;
+    readonly title: string;
+    readonly branch: string | null;
+    readonly worktreePath: string | null;
   };
   readonly switchRefFails?: boolean;
   readonly switchRefFailsAfterMutation?: boolean;
@@ -338,6 +347,22 @@ const makeHarness = (options: HarnessOptions = {}) => {
       lineage: { relationshipToParent: "none" },
     } as unknown as OrchestrationV2ThreadShell);
   }
+  const archivedThreadShells =
+    options.archivedProjectThread === undefined
+      ? []
+      : [
+          {
+            ...(projectThreadShells[0] ?? makeProjection({}).thread),
+            id: options.archivedProjectThread.id,
+            projectId,
+            title: options.archivedProjectThread.title,
+            branch: options.archivedProjectThread.branch,
+            worktreePath: options.archivedProjectThread.worktreePath,
+            activeRunId: null,
+            archivedAt: "2026-01-02T00:00:00.000Z",
+            lineage: { relationshipToParent: "none" },
+          } as unknown as OrchestrationV2ThreadShell,
+        ];
   const listProjectThreads = vi.fn((input: { readonly projectId: ProjectId }) =>
     Effect.succeed(projectThreadShells.filter((item) => item.projectId === input.projectId)),
   );
@@ -346,7 +371,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
       schemaVersion: 1,
       snapshotSequence: 1,
       threads: projectThreadShells,
-      archivedThreads: [],
+      archivedThreads: archivedThreadShells,
     } as never),
   );
   const removeWorktree = vi.fn((_: unknown) =>
@@ -439,14 +464,16 @@ const makeHarness = (options: HarnessOptions = {}) => {
         ...configuredWorktrees,
       ];
   const listWorktrees = vi.fn((cwd: string) =>
-    Effect.succeed({
-      repositoryCommonDir: "/repo/.git",
-      currentWorktreeRoot:
-        options.workspaceAliases?.[cwd] ??
-        listedWorktrees.find((worktree) => worktree.path === cwd)?.path ??
-        (cwd === workspaceRoot ? projectWorktreeRoot : cwd),
-      worktrees: listedWorktrees,
-    }),
+    options.worktreeInventoryFailsFor?.has(cwd) === true
+      ? (Effect.fail("simulated worktree inventory failure") as never)
+      : Effect.succeed({
+          repositoryCommonDir: "/repo/.git",
+          currentWorktreeRoot:
+            options.workspaceAliases?.[cwd] ??
+            listedWorktrees.find((worktree) => worktree.path === cwd)?.path ??
+            (cwd === workspaceRoot ? projectWorktreeRoot : cwd),
+          worktrees: listedWorktrees,
+        }),
   );
   let localStatusCallCount = 0;
   const localStatus = vi.fn((input: { readonly cwd: string }) => {
@@ -456,7 +483,7 @@ const makeHarness = (options: HarnessOptions = {}) => {
     }
     const current = workspaceStatuses.get(input.cwd);
     return Effect.succeed({
-      isRepo: options.notARepo !== true,
+      isRepo: current?.isRepo ?? options.notARepo !== true,
       hasPrimaryRemote: true,
       isDefaultRef: false,
       refName:
@@ -1377,6 +1404,32 @@ describe("t3_worktree_status", () => {
     });
   });
 
+  it.effect("reports a missing saved worktree even when inventory discovery fails", () => {
+    const missingPath = "/worktrees/project/deleted";
+    const harness = makeHarness({
+      thread: { worktreePath: missingPath, branch: "feature/deleted" },
+      workspaceStatuses: {
+        [workspaceRoot]: { branch: "dev" },
+        [missingPath]: { branch: null, isRepo: false },
+      },
+      worktreeInventoryFailsFor: new Set([missingPath]),
+    });
+    return Effect.gen(function* () {
+      const result = yield* runStatus(harness);
+      expect(result).toMatchObject({
+        attached: true,
+        worktreePath: missingPath,
+        branch: "feature/deleted",
+        actualWorkspace: {
+          workspacePath: missingPath,
+          branch: null,
+          isRepo: false,
+        },
+        agreement: "workspace_missing",
+      });
+    });
+  });
+
   it.effect("reports a recorded workspace that is not a Git repository", () => {
     const harness = makeHarness({
       thread: { branch: "dev", worktreePath: null },
@@ -1570,6 +1623,32 @@ describe("t3_worktree_list", () => {
         }),
       ]);
       expect(harness.localStatus).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it.effect("marks a stale checkout missing when status reports a non-repository path", () => {
+    const stalePath = "/worktrees/project/stale";
+    const harness = makeHarness({
+      worktrees: [
+        { path: workspaceRoot, refName: "dev" },
+        { path: stalePath, refName: "feature/stale" },
+      ],
+      workspaceStatuses: {
+        [workspaceRoot]: { branch: "dev" },
+        [stalePath]: { branch: null, isRepo: false },
+      },
+    });
+    return Effect.gen(function* () {
+      const result = yield* runList(harness);
+      expect(result.worktrees).toContainEqual(
+        expect.objectContaining({
+          path: stalePath,
+          availability: "missing",
+          statusError: "Worktree path does not exist.",
+          actualBranch: null,
+          isRepo: false,
+        }),
+      );
     });
   });
 
@@ -1999,6 +2078,39 @@ describe("t3_thread_checkout", () => {
         title: "Other project owner",
         branch: "feature/cross-project",
         worktreePath: null,
+      },
+    });
+    return Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        runCheckout(harness, { target: { type: "worktree", path: targetPath } }),
+      );
+      expectTypedFailure(exit, { _tag: "WorktreeMcpFailure", code: "workspace_shared" });
+      expect(harness.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  it.effect("rejects a physical worktree retained by an archived thread", () => {
+    const targetPath = "/worktrees/project/archived-owner";
+    const harness = makeHarness({
+      thread: { branch: "dev", worktreePath: null },
+      refs: [
+        rootRefs[0],
+        {
+          name: "feature/archived-owner",
+          current: false,
+          isDefault: false,
+          worktreePath: targetPath,
+        },
+      ],
+      workspaceStatuses: {
+        [workspaceRoot]: { branch: "dev" },
+        [targetPath]: { branch: "feature/archived-owner" },
+      },
+      archivedProjectThread: {
+        id: ThreadId.make("thread-archived-worktree-owner"),
+        title: "Archived owner",
+        branch: "feature/archived-owner",
+        worktreePath: targetPath,
       },
     });
     return Effect.gen(function* () {
