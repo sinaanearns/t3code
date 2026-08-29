@@ -1758,6 +1758,34 @@ describe("t3_worktree_list", () => {
     });
   });
 
+  it.effect("includes archived thread bindings retained on a physical checkout", () => {
+    const archivedThreadId = ThreadId.make("thread-archived-list-owner");
+    const harness = makeHarness({
+      worktrees: [{ path: workspaceRoot, refName: "dev" }],
+      archivedProjectThread: {
+        id: archivedThreadId,
+        title: "Archived checkout owner",
+        branch: "dev",
+        worktreePath: workspaceRoot,
+      },
+    });
+    return Effect.gen(function* () {
+      const result = yield* runList(harness, { limit: 1 });
+
+      expect(result.worktrees[0]).toMatchObject({
+        path: workspaceRoot,
+        bindingCount: 2,
+        bindings: expect.arrayContaining([
+          expect.objectContaining({
+            threadId: archivedThreadId,
+            recordedWorktreePath: workspaceRoot,
+            active: false,
+          }),
+        ]),
+      });
+    });
+  });
+
   it.effect("attributes a nested recorded cwd to its physical worktree root", () => {
     const nestedPath = `${workspaceRoot}/packages/app`;
     const harness = makeHarness({
