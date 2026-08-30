@@ -45,6 +45,12 @@ you had typed in the composer before starting the edit is restored afterwards. I
 message starts or is removed while you are editing, the edit ends: changed content moves into the
 composer when it is empty, and is discarded otherwise.
 
+Agents connected through T3 Code's built-in orchestration tools can inspect the same queue, edit
+user-authored queued prompts and attachments, reorder or cancel queued work, and promote a queued
+message into steering. These controls use the same project scope and permission ceiling as ordinary
+thread messages. They cannot rewrite T3 Code's automatic completion deliveries or cancel an active
+turn through a queue-only action.
+
 ## Commands and skills
 
 Type `/` to open the command menu. Type `$` to find and add a skill. Skill rows show their source,
