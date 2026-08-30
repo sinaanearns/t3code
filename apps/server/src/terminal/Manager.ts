@@ -195,6 +195,21 @@ export class TerminalManager extends Context.Service<
     ) => Effect.Effect<boolean, TerminalError>;
 
     /**
+     * Register ownership only while an in-process incarnation is still running.
+     *
+     * The callback runs synchronously under the existing manager admission boundary and must not
+     * call back into TerminalManager.
+     */
+    readonly admitRunningSessionHandle: (
+      input: {
+        readonly threadId: string;
+        readonly terminalId: string;
+        readonly handle: TerminalSessionHandle;
+      },
+      onAdmitted: () => void,
+    ) => Effect.Effect<boolean>;
+
+    /**
      * Resize the PTY backing a terminal session.
      */
     readonly resize: (input: TerminalResizeInput) => Effect.Effect<void, TerminalError>;
@@ -256,6 +271,11 @@ export class TerminalManager extends Context.Service<
      */
     readonly subscribe: (
       listener: (event: TerminalEvent) => Effect.Effect<void>,
+    ) => Effect.Effect<() => void>;
+
+    /** Subscribe to invalidated in-process incarnations without widening terminal wire events. */
+    readonly subscribeSessionInvalidation: (
+      listener: (handle: TerminalSessionHandle) => Effect.Effect<void>,
     ) => Effect.Effect<() => void>;
 
     /**
@@ -371,6 +391,7 @@ type DrainProcessEventAction =
       sequence: number;
       exitCode: number | null;
       exitSignal: number | null;
+      handle: TerminalSessionHandle;
     };
 
 interface TerminalManagerState {
@@ -1284,6 +1305,9 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   });
   const threadLocksRef = yield* SynchronizedRef.make(new Map<string, Semaphore.Semaphore>());
   const terminalEventListeners = new Set<(event: TerminalEvent) => Effect.Effect<void>>();
+  const sessionInvalidationListeners = new Set<
+    (handle: TerminalSessionHandle) => Effect.Effect<void>
+  >();
   const workerScope = yield* Scope.make("sequential");
   yield* Effect.addFinalizer(() => Scope.close(workerScope, Exit.void));
 
@@ -1291,6 +1315,13 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     Effect.gen(function* () {
       for (const listener of terminalEventListeners) {
         yield* listener(event).pipe(Effect.ignoreCause({ log: true }));
+      }
+    });
+
+  const publishSessionInvalidation = (handle: TerminalSessionHandle) =>
+    Effect.gen(function* () {
+      for (const listener of sessionInvalidationListeners) {
+        yield* listener(handle).pipe(Effect.ignoreCause({ log: true }));
       }
     });
 
@@ -1783,6 +1814,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         }
 
         const process = session.process;
+        const handle = sessionHandle(session);
         cleanupProcessHandles(session);
         session.process = null;
         session.pid = null;
@@ -1809,6 +1841,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
           sequence: eventStamp.sequence,
           exitCode: session.exitCode,
           exitSignal: session.exitSignal,
+          handle,
         } as const;
       });
 
@@ -1836,6 +1869,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
         threadId: action.threadId,
         terminalId: action.terminalId,
       });
+      yield* publishSessionInvalidation(action.handle);
       yield* publishEvent({
         type: "exited",
         threadId: action.threadId,
@@ -1939,6 +1973,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     eventType: "started" | "restarted",
   ) {
     yield* stopProcess(session);
+    yield* publishSessionInvalidation(sessionHandle(session));
     yield* Effect.annotateCurrentSpan({
       "terminal.thread_id": session.threadId,
       "terminal.id": session.terminalId,
@@ -2097,6 +2132,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
 
     if (Option.isSome(session)) {
       yield* stopProcess(session.value);
+      yield* publishSessionInvalidation(sessionHandle(session.value));
       yield* unregisterTerminal({ threadId, terminalId });
       yield* persistHistory(threadId, terminalId, session.value.history);
     }
@@ -2543,6 +2579,16 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       };
     });
 
+  const subscribeSessionInvalidation: TerminalManager["Service"]["subscribeSessionInvalidation"] = (
+    listener,
+  ) =>
+    Effect.sync(() => {
+      sessionInvalidationListeners.add(listener);
+      return () => {
+        sessionInvalidationListeners.delete(listener);
+      };
+    });
+
   const attachStream: TerminalManager["Service"]["attachStream"] = (input, listener) => {
     let unsubscribe: (() => void) | null = null;
 
@@ -2760,6 +2806,27 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
       }),
     );
 
+  const admitRunningSessionHandle: TerminalManager["Service"]["admitRunningSessionHandle"] = (
+    input,
+    onAdmitted,
+  ) =>
+    withThreadLock(
+      input.threadId,
+      modifyManagerState((state) => {
+        const session = state.sessions.get(toSessionKey(input.threadId, input.terminalId));
+        if (
+          session === undefined ||
+          !matchesHandle(session, input.handle) ||
+          session.status !== "running" ||
+          session.process === null
+        ) {
+          return [false, state] as const;
+        }
+        onAdmitted();
+        return [true, state] as const;
+      }),
+    );
+
   const resizeLocked = Effect.fn("terminal.resize")(function* (input: TerminalResizeInput) {
     const session = yield* getSession(input.threadId, input.terminalId);
     // ResizeObserver traffic can already be in flight when the UI closes the session.
@@ -2963,6 +3030,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     write,
     writeStrict,
     writeWithHandle,
+    admitRunningSessionHandle,
     resize,
     resizeAndInspect,
     clear,
@@ -2972,6 +3040,7 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
     close,
     closeWithHandle,
     subscribe,
+    subscribeSessionInvalidation,
     subscribeMetadata,
   });
 });
