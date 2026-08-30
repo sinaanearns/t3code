@@ -26,6 +26,7 @@ const T3_MCP_TOOL_DISPLAY_NAMES: Record<string, string> = {
   t3_worktree_handoff: "Hand off thread to a git worktree",
   t3_worktree_status: "Get thread worktree status",
   t3_environment_read: "Read current T3 environment",
+  t3_environment_preferences_update: "Update T3 environment preferences",
   preview_status: "Get preview browser status",
   preview_open: "Open a page in the preview browser",
   preview_navigate: "Navigate the preview browser",

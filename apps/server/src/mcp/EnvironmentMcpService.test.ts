@@ -15,6 +15,8 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import { threadDispatchLockLayer } from "../orchestration-v2/KeyedSerialExecutor.ts";
+import { ThreadManagementService } from "../orchestration-v2/ThreadManagementService.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { makeProviderRegistryLayer } from "../provider/testUtils/providerRegistryMock.ts";
 import * as ServerSettings from "../serverSettings.ts";
@@ -24,6 +26,10 @@ import type { McpInvocationScope } from "./McpInvocationContext.ts";
 const encodeEnvironmentMcpReadResult = Schema.encodeUnknownEffect(EnvironmentMcpReadResult);
 const encodeUnknownJsonString = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
 const environmentId = EnvironmentId.make("environment-test");
+const mutationDependencies = Layer.merge(
+  Layer.mock(ThreadManagementService)({}),
+  threadDispatchLockLayer,
+);
 const scope: McpInvocationScope = {
   environmentId,
   threadId: ThreadId.make("thread-test"),
@@ -121,6 +127,7 @@ const serviceLayer = (input: {
             followChangeRequestTemplates: true,
           },
         }),
+        mutationDependencies,
       ),
     ),
   );
@@ -211,6 +218,7 @@ describe("EnvironmentMcpService", () => {
               environmentLayer("Test", "1.0.0"),
               providerLayer,
               ServerSettings.layerTest({}),
+              mutationDependencies,
             ),
           ),
         ),
@@ -235,6 +243,7 @@ describe("EnvironmentMcpService", () => {
               environmentLayer("Test", "1.0.0"),
               unavailableRegistry,
               ServerSettings.layerTest(DEFAULT_SERVER_SETTINGS),
+              mutationDependencies,
             ),
           ),
         ),
