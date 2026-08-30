@@ -6,7 +6,14 @@
  *
  * @module ProjectionSnapshotQuery
  */
-import type { CheckpointRef, ProjectId, ThreadId } from "@t3tools/contracts";
+import type {
+  CheckpointRef,
+  MessageId,
+  ProjectId,
+  RunId,
+  ThreadId,
+  TurnItemId,
+} from "@t3tools/contracts";
 import type {
   OrchestrationCheckpointSummary,
   OrchestrationProject,
@@ -50,6 +57,60 @@ export interface ProjectionFullThreadDiffContext {
   readonly worktreePath: string | null;
   readonly latestCheckpointTurnCount: number;
   readonly toCheckpointRef: CheckpointRef | null;
+}
+
+export type ProjectionThreadContentSearchSource = "title" | "user" | "assistant";
+export type ProjectionThreadContentSearchOrigin = "legacy" | "v2";
+
+export const PROJECTION_THREAD_CONTENT_SEARCH_LIMITS = {
+  queryMinChars: 2,
+  queryMaxChars: 200,
+  pageMax: 50,
+  offsetMax: 10_000,
+  snippetMinChars: 64,
+  snippetMaxChars: 1_000,
+} as const;
+
+export class ProjectionThreadContentSearchInputError extends Error {
+  readonly _tag = "ProjectionThreadContentSearchInputError";
+}
+
+export interface ProjectionThreadContentSearchInput {
+  readonly projectId: ProjectId;
+  readonly threadId?: ThreadId;
+  readonly query: string;
+  readonly includeArchived: boolean;
+  readonly offset: number;
+  readonly limit: number;
+  readonly snippetChars: number;
+}
+
+export interface ProjectionThreadContentSearchHit {
+  readonly threadId: ThreadId;
+  readonly projectId: ProjectId;
+  readonly threadTitle: string;
+  readonly archived: boolean;
+  readonly source: ProjectionThreadContentSearchSource;
+  readonly origin: ProjectionThreadContentSearchOrigin;
+  readonly snippet: string;
+  readonly snippetTruncated: boolean;
+  readonly matchedAt: string;
+  readonly sourceThreadId: ThreadId | null;
+  readonly messageId: MessageId | null;
+  readonly runId: RunId | null;
+  readonly itemId: TurnItemId | null;
+}
+
+export interface ProjectionThreadContentSearchPage {
+  readonly hits: ReadonlyArray<ProjectionThreadContentSearchHit>;
+  /** Whether more rows existed when this live query page was read. */
+  readonly hasMore: boolean;
+  /**
+   * Offset for the next live query page, or null when complete or when the
+   * bounded traversal limit has been reached. This is not a snapshot cursor;
+   * concurrent projection changes can shift later pages.
+   */
+  readonly nextOffset: number | null;
 }
 
 /**
@@ -113,6 +174,18 @@ export interface ProjectionSnapshotQueryShape {
   readonly searchThreads: (
     input: OrchestrationSearchThreadsInput,
   ) => Effect.Effect<OrchestrationSearchThreadsResult, ProjectionRepositoryError>;
+
+  /**
+   * Search a bounded page of durable content in one project without hydrating
+   * thread projections. Unlike searchThreads, this opt-in query can include
+   * archived threads and returns stable V2 message anchors where available.
+   */
+  readonly searchThreadContent: (
+    input: ProjectionThreadContentSearchInput,
+  ) => Effect.Effect<
+    ProjectionThreadContentSearchPage,
+    ProjectionRepositoryError | ProjectionThreadContentSearchInputError
+  >;
 
   /**
    * Read the latest projection snapshot sequence without hydrating read-model
