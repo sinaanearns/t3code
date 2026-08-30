@@ -16,6 +16,7 @@ const T3_MCP_TOOL_DISPLAY_NAMES: Record<string, string> = {
   list_scheduled_tasks: "List scheduled tasks",
   update_scheduled_task: "Update a scheduled task",
   delete_scheduled_task: "Delete a scheduled task",
+  run_scheduled_task_now: "Run a scheduled task now",
   create_threads: "Create T3 threads",
   t3_thread_start: "Start a T3 thread",
   t3_thread_list: "List T3 threads",

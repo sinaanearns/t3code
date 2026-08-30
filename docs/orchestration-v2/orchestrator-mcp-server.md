@@ -140,7 +140,7 @@ selection model-visible without allowing a request that cannot run.
 
 ## Tool Surface
 
-The server exposes eleven orchestration tools.
+The server exposes the following orchestration tools.
 
 ### `orchestrator_capabilities`
 
@@ -217,6 +217,25 @@ summary and the durable `subagent_result` context transfer ID when available.
 Interrupts the active child run through the normal V2 `run.interrupt` command.
 It is idempotent for terminal tasks and accepts an optional cancellation
 reason.
+
+### `run_scheduled_task_now`
+
+Dispatches one existing scheduled task through `ScheduledTaskService` without changing
+the task definition or enabled state. The request requires a stable `clientRequestId`.
+An exact retry returns the original thread, message, run, and accepted command receipt;
+reusing that key for another task is rejected.
+
+Fresh runs re-read the task and any bound target while holding the scheduler's task
+admission lock. The caller and target also participate in the V2 thread dispatch locks,
+so a task edit, caller downgrade, or target upgrade cannot create a broader run between
+preflight and command acceptance. Unbound tasks launch through `ThreadLaunchService`;
+bound tasks use `ThreadManagementService`.
+
+Success means the scheduled prompt was durably accepted for dispatch, not that the
+provider turn completed. A manual attempt records run status and count and computes the
+next occurrence from the current schedule. On an accepted replay after the task was
+deleted, bookkeeping fields are returned as `null` because only the original dispatch
+receipt remains authoritative.
 
 ### `create_threads`
 
