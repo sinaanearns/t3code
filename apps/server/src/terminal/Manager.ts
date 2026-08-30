@@ -509,9 +509,15 @@ function cleanupProcessHandles(session: TerminalSessionState): void {
 function enqueueProcessEvent(
   session: TerminalSessionState,
   expectedPid: number,
+  expectedIncarnation: symbol,
   event: PendingProcessEvent,
 ): boolean {
-  if (!session.process || session.status !== "running" || session.pid !== expectedPid) {
+  if (
+    !session.process ||
+    session.status !== "running" ||
+    session.pid !== expectedPid ||
+    session.incarnation !== expectedIncarnation
+  ) {
     return false;
   }
 
@@ -1723,10 +1729,15 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
   const drainProcessEvents = Effect.fn("terminal.drainProcessEvents")(function* (
     session: TerminalSessionState,
     expectedPid: number,
+    expectedIncarnation: symbol,
   ) {
     while (true) {
       const action: DrainProcessEventAction = yield* Effect.sync(() => {
-        if (session.pid !== expectedPid || !session.process || session.status !== "running") {
+        if (session.pid !== expectedPid || session.incarnation !== expectedIncarnation) {
+          return { type: "idle" } as const;
+        }
+
+        if (!session.process || session.status !== "running") {
           session.pendingProcessEvents = [];
           session.pendingProcessEventIndex = 0;
           session.processEventDrainRunning = false;
@@ -1968,20 +1979,37 @@ export const makeWithOptions = Effect.fn("TerminalManager.makeWithOptions")(func
             startedShell = spawnResult.shellLabel;
 
             const processPid = ptyProcess.pid;
+            const processIncarnation = session.incarnation;
             const unsubscribeData = ptyProcess.onData((data) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "output", data })) {
+              if (
+                !enqueueProcessEvent(session, processPid, processIncarnation, {
+                  type: "output",
+                  data,
+                })
+              ) {
                 return;
               }
               runProcessEventDrain(
-                withThreadLock(session.threadId, drainProcessEvents(session, processPid)),
+                withThreadLock(
+                  session.threadId,
+                  drainProcessEvents(session, processPid, processIncarnation),
+                ),
               );
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
-              if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
+              if (
+                !enqueueProcessEvent(session, processPid, processIncarnation, {
+                  type: "exit",
+                  event,
+                })
+              ) {
                 return;
               }
               runProcessEventDrain(
-                withThreadLock(session.threadId, drainProcessEvents(session, processPid)),
+                withThreadLock(
+                  session.threadId,
+                  drainProcessEvents(session, processPid, processIncarnation),
+                ),
               );
             });
 
