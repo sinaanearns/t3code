@@ -78,7 +78,6 @@ import {
   ThreadManagementService,
 } from "../orchestration-v2/ThreadManagementService.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
-import { isOpenCodeNativeFilePart } from "../provider/opencodeRuntime.ts";
 import { ScheduledTaskService } from "../scheduledTasks/ScheduledTaskService.ts";
 import * as ServerConfig from "../config.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
@@ -194,8 +193,7 @@ function validateProviderAttachments(
       (attachment.type !== "image" && attachment.type !== "file") ||
       !kinds.includes(attachment.type) ||
       (attachment.type === "image" &&
-        !isProviderSendTurnSupportedImageMimeType(attachment.mimeType)) ||
-      (provider.driver === "opencode" && !isOpenCodeNativeFilePart(attachment)),
+        !isProviderSendTurnSupportedImageMimeType(attachment.mimeType)),
   );
   return unsupported === undefined
     ? Effect.void
