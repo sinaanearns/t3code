@@ -27,28 +27,16 @@ import * as Stream from "effect/Stream";
 import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import {
-  type KeyedSerialExecutor,
-  makeKeyedSerialExecutor,
-  ThreadDispatchLockV2,
-  threadDispatchLockLayer,
-} from "../orchestration-v2/KeyedSerialExecutor.ts";
+import * as KeyedSerialExecutor from "../orchestration-v2/KeyedSerialExecutor.ts";
 import { OrchestratorV2 } from "../orchestration-v2/Orchestrator.ts";
 import { makeLayer as makeProviderAdapterRegistryLayer } from "../orchestration-v2/ProviderAdapterRegistry.ts";
-import {
-  layer as threadManagementLayer,
-  ThreadManagementService,
-} from "../orchestration-v2/ThreadManagementService.ts";
+import * as ThreadManagement from "../orchestration-v2/ThreadManagementService.ts";
 import { makeOrchestratorV2ReplayLayerWithRegistry } from "../orchestration-v2/testkit/ProviderReplayHarness.ts";
 import { SqlitePersistenceMemory } from "../persistence/Layers/Sqlite.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { makeProviderRegistryMock } from "../provider/testUtils/providerRegistryMock.ts";
 import * as ServerSettingsModule from "../serverSettings.ts";
-import {
-  EnvironmentMcpService,
-  layer as environmentMcpLayer,
-  make as makeEnvironmentMcpService,
-} from "./EnvironmentMcpService.ts";
+import * as EnvironmentMcp from "./EnvironmentMcpService.ts";
 import type { McpInvocationScope } from "./McpInvocationContext.ts";
 
 const decodePreferencesUpdate = Schema.decodeUnknownEffect(EnvironmentMcpPreferencesUpdateInput);
@@ -113,7 +101,7 @@ const fullAccessShell = {
   deletedAt: null,
 } satisfies OrchestrationV2ThreadShell;
 
-const threadLayer = Layer.mock(ThreadManagementService)({
+const threadLayer = Layer.mock(ThreadManagement.ThreadManagementService)({
   getThreadShell: () => Effect.succeed(fullAccessShell),
 });
 
@@ -133,7 +121,7 @@ const makeServerSettingsLayer = () =>
 it.effect("persists only allowlisted preferences and publishes the normalized settings", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const service = yield* EnvironmentMcpService;
+      const service = yield* EnvironmentMcp.EnvironmentMcpService;
       const settingsService = yield* ServerSettingsModule.ServerSettingsService;
       const serverConfig = yield* ServerConfig.ServerConfig;
       const fileSystem = yield* FileSystem.FileSystem;
@@ -193,14 +181,14 @@ it.effect("persists only allowlisted preferences and publishes the normalized se
     }),
   ).pipe(
     Effect.provide(
-      environmentMcpLayer.pipe(
+      EnvironmentMcp.layer.pipe(
         Layer.provideMerge(makeServerSettingsLayer()),
         Layer.provide(
           Layer.mergeAll(
             environmentLayer,
             Layer.succeed(ProviderRegistry, makeProviderRegistryMock()),
             threadLayer,
-            threadDispatchLockLayer,
+            KeyedSerialExecutor.layer,
           ),
         ),
         Layer.provideMerge(NodeServices.layer),
@@ -229,13 +217,13 @@ it.effect("validates writing instructions by Unicode code points", () =>
 it.effect("observes a real caller downgrade before preference persistence", () =>
   Effect.scoped(
     Effect.gen(function* () {
-      const baseDispatch = yield* makeKeyedSerialExecutor<ThreadId>();
+      const baseDispatch = yield* KeyedSerialExecutor.makeKeyedSerialExecutor<ThreadId>();
       const raceActive = yield* Ref.make(false);
       const acquisitionCount = yield* Ref.make(0);
       const writerHolding = yield* Deferred.make<void>();
       const updateWaiting = yield* Deferred.make<void>();
       const releaseWriter = yield* Deferred.make<void>();
-      const instrumentedDispatch: KeyedSerialExecutor<ThreadId> = {
+      const instrumentedDispatch: KeyedSerialExecutor.KeyedSerialExecutor<ThreadId> = {
         withLock: (requestedThreadId, effect) =>
           Effect.gen(function* () {
             if (!(yield* Ref.get(raceActive)) || requestedThreadId !== threadId) {
@@ -255,7 +243,10 @@ it.effect("observes a real caller downgrade before preference persistence", () =
             return yield* baseDispatch.withLock(requestedThreadId, effect);
           }),
       };
-      const dispatchLayer = Layer.succeed(ThreadDispatchLockV2, instrumentedDispatch);
+      const dispatchLayer = Layer.succeed(
+        KeyedSerialExecutor.ThreadDispatchLockV2,
+        instrumentedDispatch,
+      );
       const orchestratorLayer = makeOrchestratorV2ReplayLayerWithRegistry(
         {
           name: "environment-preferences-policy-race",
@@ -274,12 +265,12 @@ it.effect("observes a real caller downgrade before preference persistence", () =
       );
       const applicationLayer = Layer.merge(
         orchestratorLayer,
-        threadManagementLayer.pipe(Layer.provide(orchestratorLayer)),
+        ThreadManagement.layer.pipe(Layer.provide(orchestratorLayer)),
       );
 
       yield* Effect.gen(function* () {
-        const threads = yield* ThreadManagementService;
-        const sharedDispatch = yield* ThreadDispatchLockV2;
+        const threads = yield* ThreadManagement.ThreadManagementService;
+        const sharedDispatch = yield* KeyedSerialExecutor.ThreadDispatchLockV2;
         const orchestrator = yield* OrchestratorV2;
         yield* threads.dispatch({
           type: "thread.create",
@@ -312,9 +303,9 @@ it.effect("observes a real caller downgrade before preference persistence", () =
           streamChanges: Stream.empty,
           subscribeChanges: Effect.succeed(Stream.empty),
         });
-        const service = yield* makeEnvironmentMcpService.pipe(
-          Effect.provideService(ThreadManagementService, threads),
-          Effect.provideService(ThreadDispatchLockV2, sharedDispatch),
+        const service = yield* EnvironmentMcp.make.pipe(
+          Effect.provideService(ThreadManagement.ThreadManagementService, threads),
+          Effect.provideService(KeyedSerialExecutor.ThreadDispatchLockV2, sharedDispatch),
           Effect.provideService(
             ServerEnvironment.ServerEnvironment,
             ServerEnvironment.ServerEnvironment.of({

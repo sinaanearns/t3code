@@ -19,7 +19,7 @@ import * as VcsProcess from "../../vcs/VcsProcess.ts";
 import { layer as checkpointCaptureServiceLayer } from "../CheckpointCaptureService.ts";
 import { layer as checkpointServiceLayer } from "../CheckpointService.ts";
 import { layer as checkpointRollbackServiceLayer } from "../CheckpointRollbackService.ts";
-import { ThreadDispatchLockV2, threadDispatchLockLayer } from "../KeyedSerialExecutor.ts";
+import * as KeyedSerialExecutor from "../KeyedSerialExecutor.ts";
 import { layer as commandPolicyLayer } from "../CommandPolicy.ts";
 import { layer as commandReceiptStoreLayer } from "../CommandReceiptStore.ts";
 import { layer as contextHandoffServiceLayer } from "../ContextHandoffService.ts";
@@ -237,10 +237,10 @@ export function makeOrchestratorV2ReplayLayerWithRegistry<Error>(
     >;
     readonly enableLegacyTokenStreaming?: boolean;
     readonly runEffectWorker?: boolean;
-    readonly threadDispatchLockLayer?: Layer.Layer<ThreadDispatchLockV2>;
+    readonly threadDispatchLockLayer?: Layer.Layer<KeyedSerialExecutor.ThreadDispatchLockV2>;
   } = {},
 ): Layer.Layer<
-  OrchestratorV2 | ThreadDispatchLockV2,
+  OrchestratorV2 | KeyedSerialExecutor.ThreadDispatchLockV2,
   Error | MigrationError | PlatformError.PlatformError | SqlError
 > {
   const serverConfigLayer = Layer.effect(
@@ -257,7 +257,7 @@ export function makeOrchestratorV2ReplayLayerWithRegistry<Error>(
   const serverSettingsLayer = ServerSettingsService.layerTest({
     enableLegacyTokenStreaming: options.enableLegacyTokenStreaming ?? false,
   }).pipe(Layer.orDie);
-  const dispatchLockLayer = options.threadDispatchLockLayer ?? threadDispatchLockLayer;
+  const dispatchLockLayer = options.threadDispatchLockLayer ?? KeyedSerialExecutor.layer;
   const storesLayer = Layer.mergeAll(
     eventStoreLayer,
     projectionStoreLayer,

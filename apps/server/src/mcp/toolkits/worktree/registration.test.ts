@@ -9,7 +9,7 @@ import { HttpBody, HttpClient, HttpRouter } from "effect/unstable/http";
 
 import * as ServerEnvironment from "../../../environment/ServerEnvironment.ts";
 import * as GitWorkflowService from "../../../git/GitWorkflowService.ts";
-import { threadDispatchLockLayer } from "../../../orchestration-v2/KeyedSerialExecutor.ts";
+import * as KeyedSerialExecutor from "../../../orchestration-v2/KeyedSerialExecutor.ts";
 import { ThreadManagementService } from "../../../orchestration-v2/ThreadManagementService.ts";
 import * as ProjectService from "../../../project/ProjectService.ts";
 import * as ProjectSetupScriptRunner from "../../../project/ProjectSetupScriptRunner.ts";
@@ -30,7 +30,7 @@ const StubServicesLive = Layer.mergeAll(
   Layer.mock(GitWorkflowService.GitWorkflowService)({}),
   Layer.mock(ProjectSetupScriptRunner.ProjectSetupScriptRunner)({}),
   Layer.mock(VcsStatusBroadcaster)({}),
-  threadDispatchLockLayer,
+  KeyedSerialExecutor.layer,
 );
 
 const ToolsListPayload = Schema.fromJsonString(

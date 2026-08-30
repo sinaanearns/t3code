@@ -63,7 +63,4 @@ export class ThreadDispatchLockV2 extends Context.Service<
   KeyedSerialExecutor<ThreadId>
 >()("t3/orchestration-v2/KeyedSerialExecutor/ThreadDispatchLockV2") {}
 
-export const threadDispatchLockLayer = Layer.effect(
-  ThreadDispatchLockV2,
-  makeKeyedSerialExecutor<ThreadId>(),
-);
+export const layer = Layer.effect(ThreadDispatchLockV2, makeKeyedSerialExecutor<ThreadId>());

@@ -18,7 +18,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
-import { ThreadDispatchLockV2 } from "../orchestration-v2/KeyedSerialExecutor.ts";
+import * as KeyedSerialExecutor from "../orchestration-v2/KeyedSerialExecutor.ts";
 import { ThreadManagementService } from "../orchestration-v2/ThreadManagementService.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import * as ServerSettingsModule from "../serverSettings.ts";
@@ -124,7 +124,7 @@ export const make = Effect.gen(function* () {
   const providerRegistry = yield* ProviderRegistry;
   const settingsService = yield* ServerSettingsModule.ServerSettingsService;
   const threads = yield* ThreadManagementService;
-  const threadDispatch = yield* ThreadDispatchLockV2;
+  const threadDispatch = yield* KeyedSerialExecutor.ThreadDispatchLockV2;
 
   const requireCapability = (scope: McpInvocationScope) =>
     scope.capabilities.has("orchestration")
