@@ -425,6 +425,20 @@ function resolveInteractionMode(
     : Effect.succeed(resolved);
 }
 
+function resolveLaunchRuntimeMode(
+  parentMode: RuntimeMode,
+  requested: OrchestratorMcpRuntimeMode | undefined,
+): RuntimeMode {
+  return requested === undefined || requested === "inherit" ? parentMode : requested;
+}
+
+function resolveLaunchInteractionMode(
+  parentMode: ProviderInteractionMode,
+  requested: OrchestratorMcpInteractionMode | undefined,
+): ProviderInteractionMode {
+  return requested === undefined || requested === "inherit" ? parentMode : requested;
+}
+
 function stablePart(value: string): string {
   return encodeURIComponent(value);
 }
@@ -1584,11 +1598,11 @@ const make = Effect.gen(function* () {
                 target: request.target,
                 providers,
               });
-              const runtimeMode = yield* resolveRuntimeMode(
+              const runtimeMode = resolveLaunchRuntimeMode(
                 parent.thread.runtimeMode,
                 request.runtimeMode,
               );
-              const interactionMode = yield* resolveInteractionMode(
+              const interactionMode = resolveLaunchInteractionMode(
                 parent.thread.interactionMode,
                 request.interactionMode,
               );
@@ -1624,6 +1638,11 @@ const make = Effect.gen(function* () {
                   modelSelection: target.modelSelection,
                   runtimeMode,
                   interactionMode,
+                  policyCeiling: {
+                    callerThreadId: scope.threadId,
+                    runtimeMode: parent.thread.runtimeMode,
+                    interactionMode: parent.thread.interactionMode,
+                  },
                   workspaceStrategy,
                   ...(request.prompt === undefined
                     ? {}
