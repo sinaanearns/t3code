@@ -1665,7 +1665,12 @@ const make = Effect.gen(function* () {
                   ),
                 );
               const projection = launched.projection;
-              const run = projection.runs.at(-1);
+              const run =
+                launched.initialMessageRunId === null
+                  ? undefined
+                  : projection.runs.find(
+                      (candidate) => candidate.id === launched.initialMessageRunId,
+                    );
               yield* threadManagement
                 .recordServerCreatedThread({
                   targetProjectId: projectId,
@@ -1681,7 +1686,7 @@ const make = Effect.gen(function* () {
                     parentRunId: parentRun.id,
                     parentNodeId,
                     targetThreadId: threadId,
-                    targetRunId: run?.id ?? null,
+                    targetRunId: launched.initialMessageRunId,
                   },
                 })
                 .pipe(
@@ -1695,7 +1700,7 @@ const make = Effect.gen(function* () {
               return {
                 threadId,
                 projectId,
-                runId: run?.id ?? null,
+                runId: launched.initialMessageRunId,
                 status: run?.status ?? "idle",
                 title: projection.thread.title,
                 createdBy: projection.thread.createdBy,
