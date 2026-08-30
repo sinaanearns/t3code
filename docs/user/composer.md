@@ -13,6 +13,12 @@ On web and desktop, attachments upload as soon as you add them. The send button 
 after every upload finishes. Failed uploads can be retried or removed. On mobile, attachments are
 currently limited to images.
 
+Agents using T3 Code's built-in orchestration tools can also pass uploaded attachments into a new
+thread or a follow-up message. T3 Code shares only the attachment reference and metadata between
+threads; it does not place file contents in tool results. An attachment already claimed by a thread
+can be reused only in that same thread. Provider support varies: Codex, Claude, Cursor, and Grok
+accept images, while OpenCode can also accept supported text files and PDFs.
+
 If you reload before a file finishes uploading, the draft keeps the file's name and shows **Attach
 again** next to it. Attach the file again or remove it, then send.
 

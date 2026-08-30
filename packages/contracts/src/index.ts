@@ -14,6 +14,7 @@ export * from "./providerRuntime.ts";
 export * from "./providerPolicy.ts";
 export * from "./modelSelection.ts";
 export * from "./chatAttachment.ts";
+export * from "./attachmentMcp.ts";
 export * from "./checkpointDiff.ts";
 export * from "./model.ts";
 export * from "./keybindings.ts";

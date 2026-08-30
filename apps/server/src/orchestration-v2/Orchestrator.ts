@@ -169,6 +169,8 @@ export type OrchestratorV2Error = typeof OrchestratorV2Error.Type;
 export interface OrchestratorV2DispatchResult {
   readonly sequence: number;
   readonly storedEvents: ReadonlyArray<OrchestrationV2StoredEvent>;
+  /** True when this call returned an already-accepted command receipt. */
+  readonly replayed?: boolean;
 }
 
 export interface OrchestratorV2Shape {
@@ -6904,6 +6906,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       return {
         sequence: receipt.resultSequence,
         storedEvents,
+        replayed: true,
       } satisfies OrchestratorV2DispatchResult;
     }
 
@@ -6983,6 +6986,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     return {
       sequence: committed.receipt.resultSequence,
       storedEvents: committed.storedEvents,
+      replayed: !committed.committed,
     } satisfies OrchestratorV2DispatchResult;
   });
 
