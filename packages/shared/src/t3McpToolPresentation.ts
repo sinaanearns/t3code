@@ -25,6 +25,7 @@ const T3_MCP_TOOL_DISPLAY_NAMES: Record<string, string> = {
   t3_thread_interrupt: "Interrupt a T3 thread",
   t3_checkpoint_list: "List thread checkpoints",
   t3_checkpoint_diff: "Read a checkpoint diff",
+  t3_checkpoint_restore: "Restore a thread checkpoint",
   t3_worktree_handoff: "Hand off thread to a git worktree",
   t3_worktree_status: "Get thread worktree status",
   preview_status: "Get preview browser status",
