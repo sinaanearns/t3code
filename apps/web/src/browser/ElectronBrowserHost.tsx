@@ -4,7 +4,7 @@ import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
 import { FILL_PREVIEW_VIEWPORT } from "@t3tools/contracts";
 import { useEffect, useMemo } from "react";
 
-import { isElectron } from "~/env";
+import { previewBridge } from "~/components/preview/previewBridge";
 import { useTheme } from "~/hooks/useTheme";
 import { useActivePreviewSessions } from "~/previewStateStore";
 
@@ -39,7 +39,7 @@ export function ElectronBrowserHost() {
   );
 
   useEffect(() => {
-    const preview = window.desktopBridge?.preview;
+    const preview = previewBridge;
     if (!preview) return;
 
     let lastSerializedTheme = "";
@@ -72,14 +72,14 @@ export function ElectronBrowserHost() {
   }, [resolvedTheme]);
 
   useEffect(() => {
-    const preview = window.desktopBridge?.preview;
+    const preview = previewBridge;
     if (!preview) return;
     return preview.onPointerEvent((event) => {
       useBrowserPointerStore.getState().apply(event);
     });
   }, []);
 
-  if (!isElectron) return null;
+  if (!previewBridge) return null;
   return (
     <div className="contents" data-electron-browser-host>
       {sessions.map(({ threadRef, snapshot, runtimeTabId, pictureInPicture, zoomFactor }) => {

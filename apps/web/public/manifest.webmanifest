@@ -1,4 +1,6 @@
 {
+  "name": "Rearvy Coding Agent",
+  "short_name": "Rearvy Code",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -7,8 +9,8 @@
   "theme_color": "#161616",
   "icons": [
     {
-      "src": "/favicon-32x32.png",
-      "sizes": "32x32",
+      "src": "/favicon.png",
+      "sizes": "any",
       "type": "image/png"
     },
     {

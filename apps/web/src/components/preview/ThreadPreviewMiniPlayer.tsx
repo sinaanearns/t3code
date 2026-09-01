@@ -13,7 +13,7 @@ import { useThreadPreviewState } from "~/previewStateStore";
 import { selectThreadPreviewMiniPlayer, usePreviewMiniPlayerStore } from "~/previewMiniPlayerStore";
 import { useRightPanelStore } from "~/rightPanelStore";
 
-import { previewBridge } from "./previewBridge";
+import { isEmbeddedPreviewBridge, previewBridge } from "./previewBridge";
 import {
   clampPreviewMiniPlayerPosition,
   clampPreviewMiniPlayerSize,
@@ -271,31 +271,33 @@ export function ThreadPreviewMiniPlayer({ threadRef, tabId, bottomInset }: Props
             </TooltipTrigger>
             <TooltipPopup side="top">Open in right panel</TooltipPopup>
           </Tooltip>
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant={desktopOverlay?.pictureInPicture ? "secondary" : "ghost"}
-                  size="icon-xs"
-                  aria-label={
-                    desktopOverlay?.pictureInPicture
-                      ? "Close popped-out preview"
-                      : "Pop preview into separate window"
-                  }
-                  disabled={!desktopOverlay?.hasWebContents}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={toggleNativePictureInPicture}
-                />
-              }
-            >
-              <PictureInPicture2 />
-            </TooltipTrigger>
-            <TooltipPopup side="top">
-              {desktopOverlay?.pictureInPicture
-                ? "Close separate window"
-                : "Pop into separate window"}
-            </TooltipPopup>
-          </Tooltip>
+          {!isEmbeddedPreviewBridge ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant={desktopOverlay?.pictureInPicture ? "secondary" : "ghost"}
+                    size="icon-xs"
+                    aria-label={
+                      desktopOverlay?.pictureInPicture
+                        ? "Close popped-out preview"
+                        : "Pop preview into separate window"
+                    }
+                    disabled={!desktopOverlay?.hasWebContents}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={toggleNativePictureInPicture}
+                  />
+                }
+              >
+                <PictureInPicture2 />
+              </TooltipTrigger>
+              <TooltipPopup side="top">
+                {desktopOverlay?.pictureInPicture
+                  ? "Close separate window"
+                  : "Pop into separate window"}
+              </TooltipPopup>
+            </Tooltip>
+          ) : null}
           <Tooltip>
             <TooltipTrigger
               render={

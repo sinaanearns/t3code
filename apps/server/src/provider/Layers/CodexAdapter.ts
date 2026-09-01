@@ -77,6 +77,12 @@ const PROVIDER = ProviderDriverKind.make("codex");
 export interface CodexAdapterLiveOptions {
   readonly instanceId?: ProviderInstanceId;
   readonly environment?: NodeJS.ProcessEnv;
+  /**
+   * Model a turn falls back to when none was selected. Defaults to Codex's own
+   * when unset; the Rearvy driver reuses this adapter and supplies a Rearvy
+   * slug so its backend is never asked for an OpenAI model.
+   */
+  readonly defaultModel?: string;
   readonly makeRuntime?: (
     options: CodexSessionRuntimeOptions,
   ) => Effect.Effect<
@@ -1696,6 +1702,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             ? { resumeCursor: input.resumeCursor }
             : {}),
           runtimeMode: input.runtimeMode,
+          ...(options?.defaultModel ? { fallbackModel: options.defaultModel } : {}),
           ...(input.modelSelection?.instanceId === boundInstanceId
             ? { model: input.modelSelection.model }
             : {}),

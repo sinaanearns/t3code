@@ -1,3 +1,5 @@
+import { REARVY_CODING_AGENT_BASE_NAME } from "@t3tools/shared/rearvyBranding";
+
 export type LoopbackAuthorizationStage = "dev" | "nightly" | "latest";
 
 declare const __T3CODE_BUILD_CHANNEL__: "nightly" | "latest" | undefined;
@@ -7,9 +9,9 @@ export function resolveLoopbackAuthorizationStage(): LoopbackAuthorizationStage 
 }
 
 const stageBrands = {
-  dev: "T3 Code (Dev)",
-  nightly: "T3 Code (Nightly)",
-  latest: "T3 Code",
+  dev: `${REARVY_CODING_AGENT_BASE_NAME} (Dev)`,
+  nightly: `${REARVY_CODING_AGENT_BASE_NAME} (Nightly)`,
+  latest: REARVY_CODING_AGENT_BASE_NAME,
 } as const satisfies Record<LoopbackAuthorizationStage, string>;
 
 export function renderLoopbackAuthorizationCompleteHtml(

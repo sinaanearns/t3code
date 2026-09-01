@@ -59,6 +59,21 @@ export function ProviderIcon(props: ProviderIconProps) {
     );
   }
 
+  if (props.provider === "rearvy") {
+    // Rearvy ships only a raster logo, so this mirrors the web app's vector of
+    // it: body filled, with the tilted eye and lower-left dot knocked out.
+    return (
+      <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+        <Path
+          fill={mono}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M27.5 16C28.15 17.31 28.94 19.19 28.76 20.64C28.58 22.1 27.57 23.84 26.4 24.73C25.23 25.61 23.21 25.87 21.75 25.96C20.29 26.05 18.87 25.39 17.64 25.28C16.41 25.16 15.59 25.16 14.36 25.28C13.13 25.39 11.71 26.05 10.25 25.96C8.79 25.87 6.77 25.61 5.6 24.73C4.43 23.84 3.42 22.1 3.24 20.64C3.06 19.19 3.85 17.31 4.5 16C5.15 14.69 6.43 13.79 7.15 12.78C7.86 11.77 8.27 11.07 8.78 9.94C9.3 8.82 9.44 7.26 10.25 6.04C11.06 4.82 12.29 3.2 13.64 2.63C14.99 2.06 17.01 2.06 18.36 2.63C19.71 3.2 20.94 4.82 21.75 6.04C22.56 7.26 22.7 8.82 23.22 9.94C23.73 11.07 24.14 11.77 24.85 12.78C25.57 13.79 26.85 14.69 27.5 16ZM20.7 9.53C22.96 10.27 23.85 13.76 22.69 17.33C21.53 20.9 18.76 23.2 16.5 22.47C14.24 21.73 13.35 18.24 14.51 14.67C15.67 11.1 18.44 8.8 20.7 9.53ZM11.3 19.9C12.68 19.9 13.8 21.02 13.8 22.4C13.8 23.78 12.68 24.9 11.3 24.9C9.92 24.9 8.8 23.78 8.8 22.4C8.8 21.02 9.92 19.9 11.3 19.9Z"
+        />
+      </Svg>
+    );
+  }
+
   // codex (and unknown drivers)
   return (
     <Svg width={size} height={size} viewBox="0 0 256 260" fill="none">

@@ -118,7 +118,7 @@ describe("pull request filters menu", () => {
         {
           id: projectId,
           environmentId,
-          title: "T3 Code",
+          title: "Rearvy Coding Agent",
           workspaceRoot: "/work/t3code",
         },
       ],
@@ -144,13 +144,13 @@ describe("pull request filters menu", () => {
         {
           id: projectId,
           environmentId: "env-1" as EnvironmentId,
-          title: "T3 Code · one",
+          title: "Rearvy Coding Agent · one",
           workspaceRoot: "/work/t3code-1",
         },
         {
           id: projectId,
           environmentId: "env-2" as EnvironmentId,
-          title: "T3 Code · two",
+          title: "Rearvy Coding Agent · two",
           workspaceRoot: "/work/t3code-2",
         },
       ],

@@ -18,6 +18,7 @@ import {
 import { Atom } from "effect/unstable/reactivity";
 
 import { PREVIEW_RECENT_URL_LIMIT } from "./components/preview/previewConstants";
+import { previewBridge } from "./components/preview/previewBridge";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 
 export interface DesktopPreviewOverlay {
@@ -481,7 +482,10 @@ export function removePreviewThread(ref: ScopedThreadRef): void {
 
 export function isPreviewSupportedInRuntime(): boolean {
   if (typeof window === "undefined") return false;
-  return Boolean(window.desktopBridge?.preview);
+  // The embedded Rearvy T3 client cannot see the native T3 preload because it
+  // lives in a cross-origin iframe. `previewBridge` selects the native bridge
+  // for T3 Desktop and the isolated renderer adapter for Rearvy Desktop.
+  return previewBridge !== null;
 }
 
 export function resetPreviewStateForTests(): void {

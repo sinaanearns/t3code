@@ -9,6 +9,7 @@ import type * as Types from "effect/Types";
 import { McpProtocol, McpSchema, McpServer, Tool } from "effect/unstable/ai";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
+import { REARVY_CODING_AGENT_BASE_NAME } from "@t3tools/shared/rearvyBranding";
 import packageJson from "../../package.json" with { type: "json" };
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
@@ -217,7 +218,7 @@ export const PreviewToolkitRegistrationLive = Layer.mergeAll(
 );
 
 const McpTransportLive = McpServer.layerHttp({
-  name: "T3 Code",
+  name: REARVY_CODING_AGENT_BASE_NAME,
   version: packageJson.version,
   path: "/mcp",
   protocols: [McpProtocol.v2025_06_18],

@@ -18,7 +18,7 @@ import {
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
-import { previewBridge } from "./previewBridge";
+import { isEmbeddedPreviewBridge, previewBridge } from "./previewBridge";
 
 const COLOR_SCHEME_OPTIONS: ReadonlyArray<{
   value: DesktopPreviewColorScheme;
@@ -99,34 +99,38 @@ export function PreviewMoreMenu({
         <MenuItem onClick={callTab(bridge.openDevTools)} disabled={tabDisabled}>
           Open DevTools
         </MenuItem>
-        <MenuItem onClick={onNativePictureInPicture} disabled={tabDisabled}>
-          {nativePictureInPicture
-            ? "Close separate preview window"
-            : "Open separate preview window"}
-        </MenuItem>
+        {!isEmbeddedPreviewBridge ? (
+          <MenuItem onClick={onNativePictureInPicture} disabled={tabDisabled}>
+            {nativePictureInPicture
+              ? "Close separate preview window"
+              : "Open separate preview window"}
+          </MenuItem>
+        ) : null}
         <MenuItem onClick={onToggleDeviceToolbar} disabled={tabDisabled}>
           {deviceToolbarVisible ? "Hide device toolbar" : "Show device toolbar"}
         </MenuItem>
-        <MenuSub>
-          <MenuSubTrigger disabled={tabDisabled}>Appearance</MenuSubTrigger>
-          <MenuSubPopup className="min-w-32">
-            <MenuRadioGroup
-              value={colorScheme}
-              onValueChange={(value) => {
-                if (!tabId) return;
-                void bridge
-                  .setColorScheme(tabId, value as DesktopPreviewColorScheme)
-                  .catch(() => undefined);
-              }}
-            >
-              {COLOR_SCHEME_OPTIONS.map((option) => (
-                <MenuRadioItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuRadioItem>
-              ))}
-            </MenuRadioGroup>
-          </MenuSubPopup>
-        </MenuSub>
+        {!isEmbeddedPreviewBridge ? (
+          <MenuSub>
+            <MenuSubTrigger disabled={tabDisabled}>Appearance</MenuSubTrigger>
+            <MenuSubPopup className="min-w-32">
+              <MenuRadioGroup
+                value={colorScheme}
+                onValueChange={(value) => {
+                  if (!tabId) return;
+                  void bridge
+                    .setColorScheme(tabId, value as DesktopPreviewColorScheme)
+                    .catch(() => undefined);
+                }}
+              >
+                {COLOR_SCHEME_OPTIONS.map((option) => (
+                  <MenuRadioItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+            </MenuSubPopup>
+          </MenuSub>
+        ) : null}
         <MenuSeparator />
         {/*
           Zoom row: label + inline control cluster. `closeOnClick=false`
@@ -176,13 +180,17 @@ export function PreviewMoreMenu({
             </Button>
           </span>
         </MenuItem>
-        <MenuSeparator />
-        <MenuItem onClick={() => void bridge.clearCookies().catch(() => undefined)}>
-          Clear cookies
-        </MenuItem>
-        <MenuItem onClick={() => void bridge.clearCache().catch(() => undefined)}>
-          Clear cache
-        </MenuItem>
+        {!isEmbeddedPreviewBridge ? (
+          <>
+            <MenuSeparator />
+            <MenuItem onClick={() => void bridge.clearCookies().catch(() => undefined)}>
+              Clear cookies
+            </MenuItem>
+            <MenuItem onClick={() => void bridge.clearCache().catch(() => undefined)}>
+              Clear cache
+            </MenuItem>
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

@@ -230,6 +230,10 @@
     "./claudeCompaction": {
       "types": "./src/claudeCompaction.ts",
       "import": "./src/claudeCompaction.ts"
+    },
+    "./rearvyBranding": {
+      "types": "./src/rearvyBranding.ts",
+      "import": "./src/rearvyBranding.ts"
     }
   },
   "scripts": {

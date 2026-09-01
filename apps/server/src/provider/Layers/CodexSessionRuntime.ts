@@ -166,6 +166,12 @@ export interface CodexSessionRuntimeOptions {
   readonly serviceTier?: CodexServiceTier | undefined;
   readonly resumeCursor?: CodexResumeCursor;
   readonly appServerArgs?: ReadonlyArray<string>;
+  /**
+   * Model to fall back to when a turn arrives without one. Drivers that reuse
+   * this runtime against a non-OpenAI backend (Rearvy) must supply their own,
+   * or an unmodelled turn would name a Codex slug their API does not serve.
+   */
+  readonly fallbackModel?: string;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -567,13 +573,14 @@ function runtimeModeToTurnSandboxPolicy(
 function buildCodexCollaborationMode(input: {
   readonly interactionMode?: ProviderInteractionMode;
   readonly model?: string;
+  readonly fallbackModel?: string;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly browserToolsAvailable?: boolean;
 }): EffectCodexSchema.V2TurnStartParams__CollaborationMode | undefined {
   if (input.interactionMode === undefined) {
     return undefined;
   }
-  const model = normalizeCodexModelSlug(input.model) ?? DEFAULT_MODEL;
+  const model = normalizeCodexModelSlug(input.model) ?? input.fallbackModel ?? DEFAULT_MODEL;
   const reasoningEffort = input.effort ?? "medium";
   return {
     mode: input.interactionMode,
@@ -598,6 +605,7 @@ export function buildTurnStartParams(input: {
     readonly url: string;
   }>;
   readonly model?: string;
+  readonly fallbackModel?: string;
   readonly serviceTier?: CodexServiceTier;
   readonly effort?: EffectCodexSchema.V2TurnStartParams__ReasoningEffort;
   readonly interactionMode?: ProviderInteractionMode;
@@ -622,6 +630,7 @@ export function buildTurnStartParams(input: {
   const collaborationMode = buildCodexCollaborationMode({
     ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
     ...(input.model ? { model: input.model } : {}),
+    ...(input.fallbackModel ? { fallbackModel: input.fallbackModel } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
     browserToolsAvailable: input.browserToolsAvailable ?? true,
   });
@@ -2314,6 +2323,7 @@ export const makeCodexSessionRuntime = (
             ...(input.input ? { prompt: input.input } : {}),
             ...(input.attachments ? { attachments: input.attachments } : {}),
             ...(normalizedModel ? { model: normalizedModel } : {}),
+            ...(options.fallbackModel ? { fallbackModel: options.fallbackModel } : {}),
             ...(input.serviceTier ? { serviceTier: input.serviceTier } : {}),
             ...(input.effort ? { effort: input.effort } : {}),
             ...(input.interactionMode ? { interactionMode: input.interactionMode } : {}),
