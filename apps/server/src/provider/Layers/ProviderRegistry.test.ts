@@ -1369,9 +1369,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               }
 
               assert.deepStrictEqual(cachedProvider?.models, [authoritativeProvider.models[0]!]);
-              assert.deepStrictEqual((yield* registry.getProviders)[0]?.models, [
-                authoritativeProvider.models[0]!,
-              ]);
+              // Select by instance id rather than by position: the registry
+              // also hydrates every built-in default, so index 0 is not
+              // stable as drivers are added.
+              const liveOpenCode = (yield* registry.getProviders).find(
+                (provider) => provider.instanceId === openCodeInstanceId,
+              );
+              assert.deepStrictEqual(liveOpenCode?.models, [authoritativeProvider.models[0]!]);
             }).pipe(Effect.provide(runtimeServices));
           }),
       );
@@ -1973,6 +1977,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                 "cursor",
                 "grok",
                 "opencode",
+                "rearvy",
               ]);
               assert.strictEqual(cursorProvider?.enabled, false);
               assert.strictEqual(cursorProvider?.status, "disabled");

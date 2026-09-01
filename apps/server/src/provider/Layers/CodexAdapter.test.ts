@@ -65,7 +65,7 @@ class FakeCodexRuntime implements CodexSessionRuntimeShape {
 
   public readonly startImpl = vi.fn(() =>
     Promise.resolve({
-      provider: ProviderDriverKind.make("codex"),
+      provider: this.options.provider ?? ProviderDriverKind.make("codex"),
       status: "ready" as const,
       runtimeMode: this.options.runtimeMode,
       threadId: this.options.threadId,
@@ -247,6 +247,80 @@ const validationLayer = it.layer(
   ),
 );
 
+const rearvyBoundRuntimeFactory = makeRuntimeFactory();
+const rearvyBoundLayer = it.layer(
+  Layer.effect(
+    CodexAdapter,
+    Effect.gen(function* () {
+      const codexConfig = decodeCodexSettings({});
+      return yield* makeCodexAdapter(codexConfig, {
+        providerKind: ProviderDriverKind.make("rearvy"),
+        makeRuntime: rearvyBoundRuntimeFactory.factory,
+      });
+    }),
+  ).pipe(
+    Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
+    Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(providerSessionDirectoryTestLayer),
+    Layer.provideMerge(NodeServices.layer),
+  ),
+);
+
+rearvyBoundLayer("CodexAdapterLive bound to another driver kind", (it) => {
+  it.effect("reports the bound kind rather than codex", () =>
+    Effect.gen(function* () {
+      const adapter = yield* CodexAdapter;
+      NodeAssert.equal(adapter.provider, ProviderDriverKind.make("rearvy"));
+    }),
+  );
+
+  it.effect("starts a session for the bound kind", () =>
+    Effect.gen(function* () {
+      rearvyBoundRuntimeFactory.factory.mockClear();
+      const adapter = yield* CodexAdapter;
+
+      const session = yield* adapter.startSession({
+        provider: ProviderDriverKind.make("rearvy"),
+        threadId: asThreadId("thread-1"),
+        runtimeMode: "full-access",
+      });
+
+      // ProviderService rejects a session whose provider disagrees with the
+      // adapter that produced it, so the runtime must be told the bound kind.
+      NodeAssert.equal(session.provider, adapter.provider);
+      NodeAssert.equal(
+        rearvyBoundRuntimeFactory.factory.mock.calls[0]?.[0]?.provider,
+        ProviderDriverKind.make("rearvy"),
+      );
+    }),
+  );
+
+  it.effect("still rejects a genuinely mis-routed provider", () =>
+    Effect.gen(function* () {
+      rearvyBoundRuntimeFactory.factory.mockClear();
+      const adapter = yield* CodexAdapter;
+      const result = yield* adapter
+        .startSession({
+          provider: ProviderDriverKind.make("claudeAgent"),
+          threadId: asThreadId("thread-1"),
+          runtimeMode: "full-access",
+        })
+        .pipe(Effect.result);
+
+      NodeAssert.equal(result._tag, "Failure");
+      NodeAssert.deepStrictEqual(
+        result.failure,
+        new ProviderAdapterValidationError({
+          provider: ProviderDriverKind.make("rearvy"),
+          operation: "startSession",
+          issue: "Expected provider 'rearvy' but received 'claudeAgent'.",
+        }),
+      );
+      NodeAssert.equal(rearvyBoundRuntimeFactory.factory.mock.calls.length, 0);
+    }),
+  );
+});
+
 validationLayer("CodexAdapterLive validation", (it) => {
   it.effect("returns validation error for non-codex provider on startSession", () =>
     Effect.gen(function* () {
@@ -290,6 +364,7 @@ validationLayer("CodexAdapterLive validation", (it) => {
         cwd: process.cwd(),
         launchArgs: "",
         model: "gpt-5.3-codex",
+        provider: ProviderDriverKind.make("codex"),
         providerInstanceId: ProviderInstanceId.make("codex"),
         serviceTier: "priority",
         threadId: asThreadId("thread-1"),

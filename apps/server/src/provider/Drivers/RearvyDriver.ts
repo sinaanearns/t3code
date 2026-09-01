@@ -43,7 +43,12 @@ import { ServerSettingsService } from "../../serverSettings.ts";
 import { ProviderDriverError } from "../Errors.ts";
 import { makeCodexAdapter } from "../Layers/CodexAdapter.ts";
 import { ProviderEventLoggers } from "../Layers/ProviderEventLoggers.ts";
-import { checkRearvyProviderStatus, makePendingRearvyProvider } from "../Layers/RearvyProvider.ts";
+import {
+  REARVY_ANONYMOUS_API_KEY,
+  REARVY_API_KEY_ENV,
+  checkRearvyProviderStatus,
+  makePendingRearvyProvider,
+} from "../Layers/RearvyProvider.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import {
   defaultProviderContinuationIdentity,
@@ -52,6 +57,7 @@ import {
 } from "../ProviderDriver.ts";
 import type { ServerProviderDraft } from "../providerSnapshot.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
+import { readRearvyCredentialsKey, resolveRearvyApiKey } from "../rearvyCredentials.ts";
 import {
   haveProviderSnapshotSettingsChanged,
   makeProviderSnapshotSettingsSource,
@@ -64,8 +70,7 @@ const DRIVER_KIND = ProviderDriverKind.make("rearvy");
 
 /** Codex's config id for the provider these overrides declare. */
 const REARVY_MODEL_PROVIDER_ID = "rearvy";
-/** Env var Codex reads the bearer token from, per `model_providers.*.env_key`. */
-export const REARVY_API_KEY_ENV = "REARVY_API_KEY";
+export { REARVY_API_KEY_ENV };
 /** Rearvy's default model, used when a turn arrives without a selection. */
 const REARVY_FALLBACK_MODEL = "rearvy-coding";
 
@@ -167,22 +172,37 @@ export const RearvyDriver: ProviderDriver<RearvySettings, RearvyDriverEnv> = {
 
       // Codex refuses to start when CODEX_HOME points at a missing directory,
       // and this home is ours to own — the user never creates it by hand.
-      yield* fileSystem.makeDirectory(homePath, { recursive: true }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ProviderDriverError({
-              driver: DRIVER_KIND,
-              instanceId,
-              detail: `Failed to create the Rearvy harness home at '${homePath}': ${cause.message}`,
-              cause,
-            }),
-        ),
-      );
+      // A disabled instance never spawns the harness, so it has no business
+      // writing to disk just by being configured.
+      if (enabled) {
+        yield* fileSystem.makeDirectory(homePath, { recursive: true }).pipe(
+          Effect.mapError(
+            (cause) =>
+              new ProviderDriverError({
+                driver: DRIVER_KIND,
+                instanceId,
+                detail: `Failed to create the Rearvy harness home at '${homePath}': ${cause.message}`,
+                cause,
+              }),
+          ),
+        );
+      }
 
-      const apiKey = config.apiKey.trim();
+      // Resolved once and injected into the environment, so the harness and the
+      // status probe below agree on whether this instance is authenticated
+      // instead of each deciding from a different source.
+      const mergedEnv = mergeProviderInstanceEnvironment(environment);
+      const apiKey = resolveRearvyApiKey({
+        settingsApiKey: config.apiKey,
+        environmentApiKey: mergedEnv[REARVY_API_KEY_ENV],
+        credentialsApiKey: yield* readRearvyCredentialsKey(mergedEnv),
+      });
       const processEnv = {
-        ...mergeProviderInstanceEnvironment(environment),
-        ...(apiKey ? { [REARVY_API_KEY_ENV]: apiKey } : {}),
+        ...mergedEnv,
+        // Always set: Codex refuses to start when the variable its provider
+        // config names is absent. Without a real key this is the anonymous
+        // placeholder, which Rearvy serves on the free tier.
+        [REARVY_API_KEY_ENV]: apiKey ?? REARVY_ANONYMOUS_API_KEY,
       };
       const continuationIdentity = defaultProviderContinuationIdentity({
         driverKind: DRIVER_KIND,
@@ -200,6 +220,10 @@ export const RearvyDriver: ProviderDriver<RearvySettings, RearvyDriverEnv> = {
 
       const adapter = yield* makeCodexAdapter(harnessConfig, {
         instanceId,
+        // The harness is Codex's, but the sessions and events it emits belong
+        // to Rearvy — without this the adapter rejects its own turns as
+        // mis-routed and the clients label the thread Codex.
+        providerKind: DRIVER_KIND,
         environment: processEnv,
         defaultModel: REARVY_FALLBACK_MODEL,
         ...(eventLoggers.native ? { nativeEventLogger: eventLoggers.native } : {}),

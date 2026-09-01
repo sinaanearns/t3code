@@ -576,11 +576,12 @@ export const REARVY_DEFAULT_HOME_PATH = "~/.rearvy-code";
 
 export const RearvySettings = makeProviderSettingsSchema(
   {
-    // Off by default like Cursor, Grok and OpenCode: the provider cannot do
-    // anything useful until the user pastes an API key, so probing it on
-    // every install would only produce a permanently errored rail entry.
+    // On by default, unlike the other opt-in providers: this is the app's
+    // own brand, so Rearvy belongs in the picker from first launch. Without a
+    // key the snapshot sits at "unauthenticated" and tells the user where to
+    // add one, rather than hiding until they go looking for it.
     enabled: Schema.Boolean.pipe(
-      Schema.withDecodingDefault(Effect.succeed(false)),
+      Schema.withDecodingDefault(Effect.succeed(true)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
     binaryPath: makeBinaryPathSetting("codex").pipe(

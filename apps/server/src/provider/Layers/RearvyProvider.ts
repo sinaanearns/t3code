@@ -58,7 +58,6 @@ export const REARVY_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "rearvy-coding",
     name: "Rearvy Coding",
-    shortName: "Coding",
     isCustom: false,
     isDefault: true,
     capabilities: EMPTY_CAPABILITIES,
@@ -66,21 +65,18 @@ export const REARVY_BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
   {
     slug: "rearvy-auto",
     name: "Rearvy Auto",
-    shortName: "Auto",
     isCustom: false,
     capabilities: EMPTY_CAPABILITIES,
   },
   {
     slug: "rearvy-expert",
     name: "Rearvy Expert 2.7",
-    shortName: "Expert",
     isCustom: false,
     capabilities: EMPTY_CAPABILITIES,
   },
   {
     slug: "rearvy-general",
     name: "Rearvy General 5.5",
-    shortName: "General",
     isCustom: false,
     capabilities: EMPTY_CAPABILITIES,
   },
@@ -92,9 +88,45 @@ export function rearvyModelsFromSettings(
   return providerModelsFromSettings(REARVY_BUILT_IN_MODELS, customModels ?? [], EMPTY_CAPABILITIES);
 }
 
-/** An API key is the only credential this provider has; there is no OAuth. */
-export function hasRearvyApiKey(rearvySettings: RearvySettings): boolean {
-  return rearvySettings.apiKey.trim().length > 0;
+/**
+ * Env var Codex reads the bearer token from, per `model_providers.*.env_key`.
+ * Declared here rather than in the driver because the probe needs it too, and
+ * the driver already imports this module.
+ */
+export const REARVY_API_KEY_ENV = "REARVY_API_KEY";
+
+/**
+ * Sent when nobody is signed in.
+ *
+ * Codex requires the variable named by `model_providers.*.env_key` to exist, so
+ * the harness needs *something* to send. Rearvy only recognises credentials in
+ * its own `rvy_` key format, so this value reads as no credential at all and the
+ * request is served on the free anonymous tier.
+ */
+export const REARVY_ANONYMOUS_API_KEY = "anonymous";
+
+/**
+ * An API key is the only credential this provider has; there is no OAuth.
+ *
+ * The Settings field is not the only way to supply it. `RearvyDriver` spawns
+ * the harness with the ambient process environment merged in, plus any
+ * per-instance env vars, so a `REARVY_API_KEY` from either source authenticates
+ * every request. Checking only the settings field made the probe report
+ * "unauthenticated" for a perfectly working setup and told the user to paste a
+ * key they had already provided.
+ */
+export function hasRearvyApiKey(
+  rearvySettings: RearvySettings,
+  environment: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (rearvySettings.apiKey.trim().length > 0) {
+    return true;
+  }
+
+  // The driver always populates this variable, using the anonymous placeholder
+  // when nobody is signed in, so its mere presence proves nothing.
+  const fromEnvironment = environment[REARVY_API_KEY_ENV]?.trim() ?? "";
+  return fromEnvironment.length > 0 && fromEnvironment !== REARVY_ANONYMOUS_API_KEY;
 }
 
 export function makePendingRearvyProvider(
@@ -244,21 +276,11 @@ export const checkRearvyProviderStatus = Effect.fn("checkRearvyProviderStatus")(
     });
   }
 
-  if (!hasRearvyApiKey(rearvySettings)) {
-    return buildServerProvider({
-      presentation: REARVY_PRESENTATION,
-      enabled: true,
-      checkedAt,
-      models,
-      probe: {
-        installed: true,
-        version,
-        status: "warning",
-        auth: { status: "unauthenticated" },
-        message: "Add a Rearvy API key in Settings to start using Rearvy models.",
-      },
-    });
-  }
+  // Rearvy models are free and served without an account, so a missing
+  // credential is not a problem to report — the provider is ready either way.
+  // A key only raises the rate limit and attributes usage, so it is reported as
+  // the difference between "signed in" and "anonymous", not ready and broken.
+  const authenticated = hasRearvyApiKey(rearvySettings, environment);
 
   return buildServerProvider({
     presentation: REARVY_PRESENTATION,
@@ -269,7 +291,9 @@ export const checkRearvyProviderStatus = Effect.fn("checkRearvyProviderStatus")(
       installed: true,
       version,
       status: "ready",
-      auth: { status: "authenticated", type: "api_key", label: "Rearvy API key" },
+      auth: authenticated
+        ? { status: "authenticated", type: "api_key", label: "Rearvy API key" }
+        : { status: "authenticated", type: "api_key", label: "Rearvy (free, no sign-in)" },
     },
   });
 });

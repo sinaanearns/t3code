@@ -172,6 +172,13 @@ export interface CodexSessionRuntimeOptions {
    * or an unmodelled turn would name a Codex slug their API does not serve.
    */
   readonly fallbackModel?: string;
+  /**
+   * Driver kind the sessions and events this runtime emits are stamped with.
+   * Defaults to `codex`. Drivers that reuse this runtime as their harness
+   * (Rearvy) supply their own kind so a thread opened against them reports the
+   * provider the user actually picked, not the harness it happens to run on.
+   */
+  readonly provider?: ProviderDriverKind;
 }
 
 export interface CodexSessionRuntimeSendTurnInput {
@@ -1166,6 +1173,7 @@ export const makeCodexSessionRuntime = (
   ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | Scope.Scope
 > =>
   Effect.gen(function* () {
+    const boundProvider = options.provider ?? PROVIDER;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runtimeScope = yield* Scope.Scope;
     const crypto = yield* Crypto.Crypto;
@@ -1238,7 +1246,7 @@ export const makeCodexSessionRuntime = (
 
     const sessionCreatedAt = yield* nowIso;
     const initialSession = {
-      provider: PROVIDER,
+      provider: boundProvider,
       ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
       status: "connecting",
       runtimeMode: options.runtimeMode,
@@ -1257,7 +1265,7 @@ export const makeCodexSessionRuntime = (
         const id = yield* randomUUIDv4("provider-event");
         return yield* offerEvent({
           id: EventId.make(id),
-          provider: PROVIDER,
+          provider: boundProvider,
           ...(options.providerInstanceId ? { providerInstanceId: options.providerInstanceId } : {}),
           createdAt: yield* nowIso,
           ...event,
