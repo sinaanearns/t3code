@@ -65,6 +65,7 @@ import { ThreadDeletionReactorLive } from "./orchestration/Layers/ThreadDeletion
 import * as AgentAwarenessRelay from "./relay/AgentAwarenessRelay.ts";
 import { hasCloudPublicConfig } from "./cloud/publicConfig.ts";
 import { ProviderRegistryLive } from "./provider/Layers/ProviderRegistry.ts";
+import { RearvyRouterLive } from "./provider/RearvyRouter.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import * as ProjectFaviconResolver from "./project/ProjectFaviconResolver.ts";
 import * as T3ProjectFileLoader from "./project/T3ProjectFileLoader.ts";
@@ -387,7 +388,10 @@ const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // Both read a user-owned file out of the state directory and stream changes
   // to clients; neither depends on the other.
   Layer.provideMerge(Layer.mergeAll(Keybindings.layer, EnvironmentTheme.layer)),
-  Layer.provideMerge(ProviderRegistryLive),
+  // Rearvy is a chooser over the registry, not an entry in it: it reads the
+  // snapshots `ProviderRegistryLive` publishes and picks one per message, so
+  // it composes onto the registry rather than taking a slot beside it.
+  Layer.provideMerge(RearvyRouterLive.pipe(Layer.provideMerge(ProviderRegistryLive))),
   // The instance registry is the new routing keystone — text generation,
   // adapter lookup, and runtime ingestion all resolve `ProviderInstanceId`
   // through this layer. Built-in drivers come from `BUILT_IN_DRIVERS`;

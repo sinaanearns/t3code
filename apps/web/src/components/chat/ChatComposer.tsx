@@ -275,7 +275,9 @@ import {
   NO_PROVIDER_MODEL_SELECTION,
   resolveProviderDriverKindForInstanceSelection,
   resolveSelectableProviderInstanceEntry,
+  isRearvyRouterEntry,
   sortProviderInstanceEntries,
+  withRearvyRouterEntry,
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
@@ -927,10 +929,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   // Instance-aware projection of the wire provider list. One entry per
   // configured instance (default built-in + any custom `providerInstances.*`),
   // sorted default-first per driver kind for a stable picker order.
+  // Rearvy leads the list and is not one of the configured instances: it is
+  // the "let it decide" row, resolved to a real provider on send.
   const providerInstanceEntries = useMemo<ReadonlyArray<ProviderInstanceEntry>>(
     () =>
-      sortProviderInstanceEntries(
-        applyProviderInstanceSettings(deriveProviderInstanceEntries(providerStatuses), settings),
+      withRearvyRouterEntry(
+        sortProviderInstanceEntries(
+          applyProviderInstanceSettings(deriveProviderInstanceEntries(providerStatuses), settings),
+        ),
       ),
     [providerStatuses, settings],
   );
@@ -990,6 +996,10 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         (entry) => entry.instanceId === candidate && entry.enabled && entry.isAvailable,
       );
       if (match) {
+        // The router is compatible with every lock: it never serves a turn
+        // itself, it picks a model inside whichever provider the thread is
+        // already bound to.
+        if (isRearvyRouterEntry(match)) return match.instanceId;
         // When locked to a specific driver kind, ignore persisted instance
         // ids from a different kind or continuation group.
         if (lockedProvider && match.driverKind !== lockedProvider) continue;

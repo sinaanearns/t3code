@@ -564,86 +564,6 @@ export const OpenCodeSettings = makeProviderSettingsSchema(
 );
 export type OpenCodeSettings = typeof OpenCodeSettings.Type;
 
-/**
- * Rearvy runs its own models through the Codex CLI: the CLI is the local
- * agent harness (file edits, shell, approvals) while `baseUrl` serves the
- * model over the OpenAI wire. `homePath` keeps that harness in its own
- * CODEX_HOME so Rearvy sessions and credentials never mix with the user's
- * real `~/.codex`.
- */
-export const REARVY_DEFAULT_API_BASE_URL = "https://www.rearvy.com/api/v1";
-export const REARVY_DEFAULT_HOME_PATH = "~/.rearvy-code";
-
-export const RearvySettings = makeProviderSettingsSchema(
-  {
-    // On by default, unlike the other opt-in providers: this is the app's
-    // own brand, so Rearvy belongs in the picker from first launch. Without a
-    // key the snapshot sits at "unauthenticated" and tells the user where to
-    // add one, rather than hiding until they go looking for it.
-    enabled: Schema.Boolean.pipe(
-      Schema.withDecodingDefault(Effect.succeed(true)),
-      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
-    ),
-    binaryPath: makeBinaryPathSetting("codex").pipe(
-      Schema.annotateKey({
-        title: "Codex binary path",
-        description: "Rearvy drives the Codex CLI locally as its agent harness.",
-        providerSettingsForm: { placeholder: "codex", clearWhenEmpty: "omit" },
-      }),
-    ),
-    baseUrl: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed(REARVY_DEFAULT_API_BASE_URL)),
-      Schema.annotateKey({
-        title: "API base URL",
-        description: "Rearvy API root that serves the models.",
-        providerSettingsForm: {
-          placeholder: REARVY_DEFAULT_API_BASE_URL,
-          clearWhenEmpty: "omit",
-        },
-      }),
-    ),
-    apiKey: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "API key",
-        description: "Rearvy API key. Stored in plain text on disk.",
-        providerSettingsForm: {
-          control: "password",
-          placeholder: "rk_...",
-          clearWhenEmpty: "omit",
-        },
-      }),
-    ),
-    homePath: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "CODEX_HOME path",
-        description: `Harness home for this instance. Defaults to ${REARVY_DEFAULT_HOME_PATH}.`,
-        providerSettingsForm: {
-          placeholder: REARVY_DEFAULT_HOME_PATH,
-          clearWhenEmpty: "omit",
-        },
-      }),
-    ),
-    launchArgs: TrimmedString.pipe(
-      Schema.withDecodingDefault(Effect.succeed("")),
-      Schema.annotateKey({
-        title: "Launch arguments",
-        description: "Extra CLI arguments appended after Rearvy's own provider overrides.",
-        providerSettingsForm: { clearWhenEmpty: "omit" },
-      }),
-    ),
-    customModels: Schema.Array(Schema.String).pipe(
-      Schema.withDecodingDefault(Effect.succeed([])),
-      Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
-    ),
-  },
-  {
-    order: ["apiKey", "baseUrl", "binaryPath", "homePath", "launchArgs"],
-  },
-);
-export type RearvySettings = typeof RearvySettings.Type;
-
 export const ObservabilitySettings = Schema.Struct({
   otlpTracesUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   otlpMetricsUrl: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -797,7 +717,6 @@ export const ServerSettings = Schema.Struct({
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     grok: GrokSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
     opencode: OpenCodeSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
-    rearvy: RearvySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   }).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   // New driver-agnostic instance map. Keyed by `ProviderInstanceId`; values
   // are `ProviderInstanceConfig` envelopes. The driver-specific config blob
@@ -951,16 +870,6 @@ const OpenCodeSettingsPatch = Schema.Struct({
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-const RearvySettingsPatch = Schema.Struct({
-  enabled: Schema.optionalKey(Schema.Boolean),
-  binaryPath: Schema.optionalKey(TrimmedString),
-  baseUrl: Schema.optionalKey(TrimmedString),
-  apiKey: Schema.optionalKey(TrimmedString),
-  homePath: Schema.optionalKey(TrimmedString),
-  launchArgs: Schema.optionalKey(TrimmedString),
-  customModels: Schema.optionalKey(Schema.Array(Schema.String)),
-});
-
 export const ServerSettingsPatch = Schema.Struct({
   // Server settings
   enableLegacyTokenStreaming: Schema.optionalKey(Schema.Boolean),
@@ -1002,7 +911,6 @@ export const ServerSettingsPatch = Schema.Struct({
       cursor: Schema.optionalKey(CursorSettingsPatch),
       grok: Schema.optionalKey(GrokSettingsPatch),
       opencode: Schema.optionalKey(OpenCodeSettingsPatch),
-      rearvy: Schema.optionalKey(RearvySettingsPatch),
     }),
   ),
   // Whole-map replacement for the new instance config. Patching individual

@@ -247,15 +247,15 @@ const validationLayer = it.layer(
   ),
 );
 
-const rearvyBoundRuntimeFactory = makeRuntimeFactory();
-const rearvyBoundLayer = it.layer(
+const forkBoundRuntimeFactory = makeRuntimeFactory();
+const forkBoundLayer = it.layer(
   Layer.effect(
     CodexAdapter,
     Effect.gen(function* () {
       const codexConfig = decodeCodexSettings({});
       return yield* makeCodexAdapter(codexConfig, {
-        providerKind: ProviderDriverKind.make("rearvy"),
-        makeRuntime: rearvyBoundRuntimeFactory.factory,
+        providerKind: ProviderDriverKind.make("acmeFork"),
+        makeRuntime: forkBoundRuntimeFactory.factory,
       });
     }),
   ).pipe(
@@ -266,21 +266,21 @@ const rearvyBoundLayer = it.layer(
   ),
 );
 
-rearvyBoundLayer("CodexAdapterLive bound to another driver kind", (it) => {
+forkBoundLayer("CodexAdapterLive bound to another driver kind", (it) => {
   it.effect("reports the bound kind rather than codex", () =>
     Effect.gen(function* () {
       const adapter = yield* CodexAdapter;
-      NodeAssert.equal(adapter.provider, ProviderDriverKind.make("rearvy"));
+      NodeAssert.equal(adapter.provider, ProviderDriverKind.make("acmeFork"));
     }),
   );
 
   it.effect("starts a session for the bound kind", () =>
     Effect.gen(function* () {
-      rearvyBoundRuntimeFactory.factory.mockClear();
+      forkBoundRuntimeFactory.factory.mockClear();
       const adapter = yield* CodexAdapter;
 
       const session = yield* adapter.startSession({
-        provider: ProviderDriverKind.make("rearvy"),
+        provider: ProviderDriverKind.make("acmeFork"),
         threadId: asThreadId("thread-1"),
         runtimeMode: "full-access",
       });
@@ -289,15 +289,15 @@ rearvyBoundLayer("CodexAdapterLive bound to another driver kind", (it) => {
       // adapter that produced it, so the runtime must be told the bound kind.
       NodeAssert.equal(session.provider, adapter.provider);
       NodeAssert.equal(
-        rearvyBoundRuntimeFactory.factory.mock.calls[0]?.[0]?.provider,
-        ProviderDriverKind.make("rearvy"),
+        forkBoundRuntimeFactory.factory.mock.calls[0]?.[0]?.provider,
+        ProviderDriverKind.make("acmeFork"),
       );
     }),
   );
 
   it.effect("still rejects a genuinely mis-routed provider", () =>
     Effect.gen(function* () {
-      rearvyBoundRuntimeFactory.factory.mockClear();
+      forkBoundRuntimeFactory.factory.mockClear();
       const adapter = yield* CodexAdapter;
       const result = yield* adapter
         .startSession({
@@ -311,12 +311,12 @@ rearvyBoundLayer("CodexAdapterLive bound to another driver kind", (it) => {
       NodeAssert.deepStrictEqual(
         result.failure,
         new ProviderAdapterValidationError({
-          provider: ProviderDriverKind.make("rearvy"),
+          provider: ProviderDriverKind.make("acmeFork"),
           operation: "startSession",
-          issue: "Expected provider 'rearvy' but received 'claudeAgent'.",
+          issue: "Expected provider 'acmeFork' but received 'claudeAgent'.",
         }),
       );
-      NodeAssert.equal(rearvyBoundRuntimeFactory.factory.mock.calls.length, 0);
+      NodeAssert.equal(forkBoundRuntimeFactory.factory.mock.calls.length, 0);
     }),
   );
 });

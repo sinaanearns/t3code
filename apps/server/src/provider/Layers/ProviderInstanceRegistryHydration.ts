@@ -58,10 +58,26 @@ import { ProviderInstanceRegistryMutator } from "../Services/ProviderInstanceReg
 import { ProviderInstanceRegistryMutableLayer } from "./ProviderInstanceRegistryLive.ts";
 
 /**
+ * Driver kinds this build used to ship and no longer does.
+ *
+ * An envelope naming one of these would otherwise survive in
+ * `settings.providerInstances` forever and surface as an "unavailable" shadow
+ * card in Providers — a dead entry the user cannot fix, because the driver it
+ * names no longer exists to be installed. Dropping them here retires the
+ * instance on the next settings read instead.
+ *
+ * `rearvy` was a provider driver that ran the Codex CLI against Rearvy's API.
+ * Rearvy is now a router over the installed providers, not a provider of its
+ * own; see `RearvyRouter`.
+ */
+const RETIRED_DRIVER_KINDS: ReadonlySet<string> = new Set(["rearvy"]);
+
+/**
  * Synthesize a `ProviderInstanceConfigMap` from a `ServerSettings` snapshot.
  *
  * Strategy:
- *   1. Copy all explicit `settings.providerInstances` entries verbatim.
+ *   1. Copy all explicit `settings.providerInstances` entries verbatim,
+ *      minus any naming a retired driver kind.
  *   2. For each built-in driver whose `defaultInstanceIdForDriver(id)` key
  *      is *not* already in the explicit map, synthesize an entry from the
  *      matching legacy `settings.providers.<kind>` blob.
@@ -73,7 +89,11 @@ import { ProviderInstanceRegistryMutableLayer } from "./ProviderInstanceRegistry
 export const deriveProviderInstanceConfigMap = (
   settings: ServerSettings,
 ): ProviderInstanceConfigMap => {
-  const merged: Record<string, ProviderInstanceConfig> = { ...settings.providerInstances };
+  const merged: Record<string, ProviderInstanceConfig> = Object.fromEntries(
+    Object.entries(settings.providerInstances).filter(
+      ([, envelope]) => !RETIRED_DRIVER_KINDS.has(envelope.driver),
+    ),
+  );
 
   for (const driver of BUILT_IN_DRIVERS) {
     const instanceId = defaultInstanceIdForDriver(driver.driverKind);

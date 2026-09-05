@@ -80,6 +80,7 @@ import {
   ProviderUploadFeedbackResult,
 } from "./provider.ts";
 import { ProviderInstanceId } from "./providerInstance.ts";
+import { RearvyRouteError, RearvyRouteInput, RearvyRouteResult } from "./rearvyRouter.ts";
 import {
   PullRequestActionInput,
   PullRequestActivity,
@@ -228,6 +229,7 @@ export const WS_METHODS = {
 
   // Provider methods
   providerUploadFeedback: "provider.uploadFeedback",
+  providerRoute: "provider.route",
 
   // VCS methods
   vcsPull: "vcs.pull",
@@ -700,6 +702,20 @@ export const WsProviderUploadFeedbackRpc = Rpc.make(WS_METHODS.providerUploadFee
   error: Schema.Union([ProviderUploadFeedbackError, EnvironmentAuthorizationError]),
 });
 
+/**
+ * Ask Rearvy which installed provider and model should serve a message.
+ *
+ * The client calls this while the composer's selection is the Rearvy router
+ * sentinel, then dispatches the turn with the concrete selection it gets
+ * back. Candidates are gathered server-side from the live provider snapshots,
+ * so the payload carries only the prompt.
+ */
+export const WsProviderRouteRpc = Rpc.make(WS_METHODS.providerRoute, {
+  payload: RearvyRouteInput,
+  success: RearvyRouteResult,
+  error: Schema.Union([RearvyRouteError, EnvironmentAuthorizationError]),
+});
+
 export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
   payload: VcsStatusInput,
   success: VcsStatusStreamEvent,
@@ -1081,6 +1097,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsAttachmentsCreateUploadUrlRpc,
   WsAttachmentsDeleteRpc,
   WsProviderUploadFeedbackRpc,
+  WsProviderRouteRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
   WsVcsRefreshStatusRpc,

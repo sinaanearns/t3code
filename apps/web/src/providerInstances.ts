@@ -26,6 +26,15 @@ import {
   type ServerProviderState,
 } from "@t3tools/contracts";
 
+import {
+  REARVY_ROUTER_DESCRIPTION,
+  REARVY_ROUTER_DRIVER_KIND,
+  REARVY_ROUTER_INSTANCE_ID,
+  REARVY_ROUTER_LABEL,
+  REARVY_ROUTER_MODEL,
+  REARVY_ROUTER_MODEL_NAME,
+} from "@t3tools/contracts";
+
 import { formatProviderDriverKindLabel } from "./providerModels";
 
 /**
@@ -165,6 +174,82 @@ function resolveInstanceDisplayName(
     if (humanized.length > 0) return humanized;
   }
   return trimmedSnapshotName || kindLabel;
+}
+
+/**
+ * The Rearvy row in the model picker.
+ *
+ * Rearvy is not a configured provider — the server has no instance for it and
+ * never will — but the picker, the composer, and the draft store are all keyed
+ * on `ProviderInstanceId`, so the row travels through them as an entry like
+ * any other. Selecting it parks the sentinel selection in the draft; the send
+ * path swaps it for a real provider before anything is dispatched.
+ *
+ * It reports `ready` unconditionally because there is nothing to probe: the
+ * agents it routes to carry their own readiness, and if none of them is ready
+ * the router says so when asked, with a reason the user can act on.
+ */
+export const REARVY_ROUTER_ENTRY: ProviderInstanceEntry = {
+  instanceId: REARVY_ROUTER_INSTANCE_ID,
+  driverKind: REARVY_ROUTER_DRIVER_KIND,
+  displayName: REARVY_ROUTER_LABEL,
+  enabled: true,
+  installed: true,
+  status: "ready",
+  isDefault: true,
+  isAvailable: true,
+  snapshot: {
+    instanceId: REARVY_ROUTER_INSTANCE_ID,
+    driver: REARVY_ROUTER_DRIVER_KIND,
+    displayName: REARVY_ROUTER_LABEL,
+    enabled: true,
+    installed: true,
+    version: null,
+    status: "ready",
+    auth: { status: "authenticated", type: "none", label: REARVY_ROUTER_DESCRIPTION },
+    // Synthetic: there is nothing to probe, so there is no probe time.
+    checkedAt: "1970-01-01T00:00:00.000Z",
+    models: [
+      {
+        slug: REARVY_ROUTER_MODEL,
+        name: REARVY_ROUTER_MODEL_NAME,
+        isCustom: false,
+        isDefault: true,
+        capabilities: null,
+      },
+    ],
+    slashCommands: [],
+    skills: [],
+  },
+  models: [
+    {
+      slug: REARVY_ROUTER_MODEL,
+      name: REARVY_ROUTER_MODEL_NAME,
+      isCustom: false,
+      isDefault: true,
+      capabilities: null,
+    },
+  ],
+};
+
+/**
+ * Put Rearvy at the head of the picker.
+ *
+ * It leads because it is the choice you make when you do not want to make the
+ * choice — burying it under five concrete agents would defeat the point. It is
+ * omitted when there is nothing to route to, so an install with no working
+ * provider offers a chooser over an empty set.
+ */
+export function withRearvyRouterEntry(
+  entries: ReadonlyArray<ProviderInstanceEntry>,
+): ReadonlyArray<ProviderInstanceEntry> {
+  if (!entries.some(isProviderInstancePickerReady)) return entries;
+  return [REARVY_ROUTER_ENTRY, ...entries];
+}
+
+/** Whether this entry is the router rather than a configured provider. */
+export function isRearvyRouterEntry(entry: ProviderInstanceEntry): boolean {
+  return entry.instanceId === REARVY_ROUTER_INSTANCE_ID;
 }
 
 /**

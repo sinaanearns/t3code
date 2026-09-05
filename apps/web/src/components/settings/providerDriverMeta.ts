@@ -5,18 +5,9 @@ import {
   GrokSettings,
   OpenCodeSettings,
   ProviderDriverKind,
-  RearvySettings,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
-import {
-  ClaudeAI,
-  CursorIcon,
-  GrokIcon,
-  type Icon,
-  OpenAI,
-  OpenCodeIcon,
-  RearvyIcon,
-} from "../Icons";
+import { ClaudeAI, CursorIcon, GrokIcon, type Icon, OpenAI, OpenCodeIcon } from "../Icons";
 
 type ProviderSettingsSchema = {
   readonly fields: Readonly<Record<string, Schema.Top>>;
@@ -75,13 +66,6 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     label: "OpenCode",
     icon: OpenCodeIcon,
     settingsSchema: OpenCodeSettings,
-  },
-  {
-    value: ProviderDriverKind.make("rearvy"),
-    label: "Rearvy",
-    icon: RearvyIcon,
-    badgeLabel: "Early Access",
-    settingsSchema: RearvySettings,
   },
 ];
 

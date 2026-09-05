@@ -1,4 +1,12 @@
-import { ProviderDriverKind, ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
+import {
+  ProviderDriverKind,
+  ProviderInstanceId,
+  REARVY_ROUTER_DRIVER_KIND,
+  REARVY_ROUTER_INSTANCE_ID,
+  REARVY_ROUTER_MODEL,
+  REARVY_ROUTER_SELECTION,
+  type ServerProvider,
+} from "@t3tools/contracts";
 import { DEFAULT_UNIFIED_SETTINGS, type UnifiedSettings } from "@t3tools/contracts/settings";
 import { describe, expect, it } from "vite-plus/test";
 import { createModelSelection } from "@t3tools/shared/model";
@@ -497,6 +505,33 @@ describe("instance-scoped model selection", () => {
 
     expect(state.selectedModel).toBe("gpt-5.6-sol");
     expect(dispatch.modelOptionsForDispatch).toBeUndefined();
+  });
+
+  it("keeps the Rearvy selection instead of resolving it against a provider it has none of", () => {
+    // Rearvy is not a configured instance, so every snapshot lookup misses it.
+    // Resolving through them would silently hand back some other agent's
+    // default model and the composer would look like the pick never happened.
+    const providers = [
+      provider({
+        provider: ProviderDriverKind.make("codex"),
+        instanceId: ProviderInstanceId.make("codex"),
+        models: ["gpt-5.6-sol"],
+      }),
+    ];
+    const state = deriveEffectiveComposerModelState({
+      draft: {
+        activeProvider: REARVY_ROUTER_INSTANCE_ID,
+        modelSelectionByProvider: { [REARVY_ROUTER_INSTANCE_ID]: REARVY_ROUTER_SELECTION },
+      },
+      providers,
+      selectedProvider: REARVY_ROUTER_DRIVER_KIND,
+      selectedInstanceId: REARVY_ROUTER_INSTANCE_ID,
+      threadModelSelection: null,
+      projectModelSelection: null,
+      settings: settingsWithProviderInstances(),
+    });
+
+    expect(state.selectedModel).toBe(REARVY_ROUTER_MODEL);
   });
 
   it("preserves an explicit draft OpenCode selection while the catalog is empty", () => {

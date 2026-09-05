@@ -79,15 +79,15 @@ export interface CodexAdapterLiveOptions {
   readonly environment?: NodeJS.ProcessEnv;
   /**
    * Model a turn falls back to when none was selected. Defaults to Codex's own
-   * when unset; the Rearvy driver reuses this adapter and supplies a Rearvy
-   * slug so its backend is never asked for an OpenAI model.
+   * when unset; a driver that reuses this adapter against a non-OpenAI backend
+   * supplies its own slug so that backend is never asked for an OpenAI model.
    */
   readonly defaultModel?: string;
   /**
-   * Driver kind this adapter instance serves. Defaults to `codex`. The Rearvy
-   * driver reuses this adapter as its harness and supplies its own kind, so a
-   * session started for it is neither rejected as mis-routed nor reported to
-   * the clients as Codex.
+   * Driver kind this adapter instance serves. Defaults to `codex`. A driver
+   * that reuses this adapter as its harness supplies its own kind, so a session
+   * started for it is neither rejected as mis-routed nor reported to the
+   * clients as Codex.
    */
   readonly providerKind?: ProviderDriverKind;
   readonly makeRuntime?: (

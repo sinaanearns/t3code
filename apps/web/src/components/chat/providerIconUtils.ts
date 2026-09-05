@@ -1,4 +1,4 @@
-import { ProviderDriverKind } from "@t3tools/contracts";
+import { ProviderDriverKind, REARVY_ROUTER_DRIVER_KIND } from "@t3tools/contracts";
 import { ClaudeAI, CursorIcon, GrokIcon, Icon, OpenAI, OpenCodeIcon, RearvyIcon } from "../Icons";
 import { PROVIDER_OPTIONS } from "../../session-logic";
 
@@ -8,7 +8,7 @@ export const PROVIDER_ICON_BY_PROVIDER: Partial<Record<ProviderDriverKind, Icon>
   [ProviderDriverKind.make("opencode")]: OpenCodeIcon,
   [ProviderDriverKind.make("cursor")]: CursorIcon,
   [ProviderDriverKind.make("grok")]: GrokIcon,
-  [ProviderDriverKind.make("rearvy")]: RearvyIcon,
+  [REARVY_ROUTER_DRIVER_KIND]: RearvyIcon,
 };
 
 function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {

@@ -1,6 +1,7 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
+  REARVY_ROUTER_DRIVER_KIND,
   type ResolvedKeybindingsConfig,
 } from "@t3tools/contracts";
 import { resolveSelectableModel } from "@t3tools/shared/model";
@@ -213,6 +214,10 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const matchesLockedProvider = useCallback(
     (entry: Pick<ProviderInstanceEntry, "driverKind" | "continuationGroupKey">): boolean => {
       if (props.lockedProvider === null) return true;
+      // A lock fixes which agent serves the thread, and Rearvy never serves
+      // one — inside a locked thread it only picks the model. So it stays
+      // selectable where a second agent would not be.
+      if (entry.driverKind === REARVY_ROUTER_DRIVER_KIND) return true;
       if (entry.driverKind !== props.lockedProvider) return false;
       if (!props.lockedContinuationGroupKey) return true;
       return entry.continuationGroupKey === props.lockedContinuationGroupKey;

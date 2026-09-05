@@ -21,6 +21,10 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   ProviderInteractionMode,
   ProviderDriverKind,
+  isRearvyRouterInstanceId,
+  isRearvyRouterSelection,
+  REARVY_ROUTE_MAX_PROMPT_CHARS,
+  REARVY_ROUTER_SELECTION,
   RuntimeMode,
   TerminalOpenInput,
 } from "@t3tools/contracts";
@@ -1315,6 +1319,9 @@ function ChatViewContent(props: ChatViewProps) {
     reportFailure: false,
   });
   const uploadThreadFeedback = useAtomCommand(threadEnvironment.uploadFeedback, {
+    reportFailure: false,
+  });
+  const routeRearvySelection = useAtomCommand(threadEnvironment.routeSelection, {
     reportFailure: false,
   });
   const interruptThreadTurn = useAtomCommand(threadEnvironment.interruptTurn, {
@@ -5726,6 +5733,57 @@ function ChatViewContent(props: ChatViewProps) {
       return;
     }
     const threadIdForSend = activeThread.id;
+
+    // Rearvy is a chooser, not an agent. When it is the composer's selection
+    // there is no session it could start, so resolve it here into the real
+    // provider and model that will serve this message. Every dispatch below
+    // this point works with the resolved selection and never sees the
+    // sentinel.
+    //
+    // Once the thread has a session its provider is fixed — a started thread
+    // cannot change agents — so routing narrows to picking the model inside
+    // the agent already serving it.
+    let sendProvider = ctxSelectedProvider;
+    let sendModel = ctxSelectedModel;
+    let sendProviderModels = ctxSelectedProviderModels;
+    let sendModelSelection = ctxSelectedModelSelection;
+    if (isRearvyRouterSelection(ctxSelectedModelSelection)) {
+      const boundInstanceId = activeThread.session?.providerInstanceId ?? null;
+      // The router reads far less than the composer accepts, and an
+      // attachment-only message has no text at all — but both still have to be
+      // routed somewhere, so neither may reach the wire empty or oversized.
+      const promptForRouting =
+        trimmed.slice(0, REARVY_ROUTE_MAX_PROMPT_CHARS) || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT;
+      const routeResult = await routeRearvySelection({
+        environmentId,
+        input: {
+          threadId: threadIdForSend,
+          prompt: promptForRouting,
+          ...(boundInstanceId ? { lockedInstanceId: boundInstanceId } : {}),
+        },
+      });
+      if (routeResult._tag === "Failure") {
+        // Nothing was dispatched and the draft is untouched, so the user can
+        // fix the cause and press send again, or pick an agent by hand.
+        if (!isAtomCommandInterrupted(routeResult)) {
+          toastManager.add(
+            stackedThreadToast({
+              type: "warning",
+              title: "Rearvy could not pick an agent",
+              description: chatActionErrorMessage(squashAtomCommandFailure(routeResult)),
+            }),
+          );
+        }
+        return;
+      }
+      const routed = routeResult.value;
+      const routedSnapshot =
+        providerStatuses.find((snapshot) => snapshot.instanceId === routed.instanceId) ?? null;
+      sendModelSelection = createModelSelection(routed.instanceId, routed.model);
+      sendModel = routed.model;
+      sendProvider = routedSnapshot?.driver ?? ctxSelectedProvider;
+      sendProviderModels = routedSnapshot?.models ?? [];
+    }
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
     const baseBranchForWorktree =
       isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath
@@ -5761,9 +5819,9 @@ function ChatViewContent(props: ChatViewProps) {
       composerReviewCommentsSnapshot,
     );
     const outgoingMessageText = formatOutgoingPrompt({
-      provider: ctxSelectedProvider,
-      model: ctxSelectedModel,
-      models: ctxSelectedProviderModels,
+      provider: sendProvider,
+      model: sendModel,
+      models: sendProviderModels,
       effort: ctxSelectedPromptEffort,
       text: messageTextForSend || ATTACHMENT_ONLY_BOOTSTRAP_PROMPT,
     });
@@ -5974,9 +6032,9 @@ function ChatViewContent(props: ChatViewProps) {
     }
     const title = truncate(titleSeed);
     const threadCreateModelSelection = createModelSelection(
-      ctxSelectedModelSelection.instanceId,
-      ctxSelectedModel || activeProject.defaultModelSelection?.model || DEFAULT_MODEL,
-      ctxSelectedModelSelection.options,
+      sendModelSelection.instanceId,
+      sendModel || activeProject.defaultModelSelection?.model || DEFAULT_MODEL,
+      sendModelSelection.options,
     );
 
     let failure: AtomCommandResult<unknown, unknown> | null = null;
@@ -5998,7 +6056,7 @@ function ChatViewContent(props: ChatViewProps) {
       const settingsResult = await persistThreadSettingsForNextTurn({
         threadId: threadIdForSend,
         createdAt: messageCreatedAt,
-        ...(ctxSelectedModel ? { modelSelection: ctxSelectedModelSelection } : {}),
+        ...(sendModel ? { modelSelection: sendModelSelection } : {}),
         ...(localCheckoutBranchMismatch
           ? { branch: localCheckoutBranchMismatch.currentBranch }
           : {}),
@@ -6072,7 +6130,7 @@ function ChatViewContent(props: ChatViewProps) {
             text: outgoingMessageText,
             attachments: turnAttachmentsResult.value,
           },
-          modelSelection: ctxSelectedModelSelection,
+          modelSelection: sendModelSelection,
           titleSeed: title,
           runtimeMode,
           interactionMode,
@@ -6707,6 +6765,14 @@ function ChatViewContent(props: ChatViewProps) {
       if (!activeThread) {
         return null;
       }
+      // Picking Rearvy defers the model choice rather than making one, so the
+      // "start a new thread to change models" rule has nothing to catch here.
+      // It must agree with `onProviderModelSelect`, which accepts the router
+      // in a started thread; a row that looks disabled but still works is
+      // worse than either answer on its own.
+      if (isRearvyRouterInstanceId(instanceId)) {
+        return null;
+      }
       const reason = getStartedThreadModelChangeBlockReason({
         providers: providerStatuses,
         hasStartedSession: activeThread.session !== null,
@@ -6722,6 +6788,22 @@ function ChatViewContent(props: ChatViewProps) {
   const onProviderModelSelect = useCallback(
     (instanceId: ProviderInstanceId, model: string) => {
       if (!activeThread) return;
+      // Rearvy is the one row with nothing behind it to resolve against: it is
+      // not a configured instance, so every normalization below would fail to
+      // find a snapshot and drop the selection on the floor. Its single row is
+      // the selection. It is also compatible with a locked thread, where it
+      // goes on choosing the model inside the bound agent, so the lock checks
+      // below do not apply either.
+      if (isRearvyRouterInstanceId(instanceId)) {
+        setComposerDraftModelSelection(
+          scopeThreadRef(activeThread.environmentId, activeThread.id),
+          REARVY_ROUTER_SELECTION,
+          { explicit: true },
+        );
+        setStickyComposerModelSelection(REARVY_ROUTER_SELECTION);
+        scheduleComposerFocus();
+        return;
+      }
       // Look up the configured instance so model normalization and custom
       // model lookup stay scoped to that exact instance. Unknown instance ids
       // are rejected by returning early; the server remains authoritative too.

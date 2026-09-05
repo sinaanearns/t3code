@@ -210,5 +210,14 @@ export function createThreadEnvironmentAtoms<R, E>(
       scheduler,
       concurrency,
     }),
+    // Resolves the Rearvy composer selection into the provider instance and
+    // model that will actually run the turn. Called on the send path, before
+    // the session starts, because a session cannot be started against Rearvy.
+    routeSelection: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:commands:thread:route-selection",
+      tag: WS_METHODS.providerRoute,
+      scheduler,
+      concurrency,
+    }),
   };
 }

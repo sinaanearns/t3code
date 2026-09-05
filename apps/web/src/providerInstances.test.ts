@@ -10,6 +10,8 @@ import {
   resolveDefaultProviderModelSelection,
   resolveSelectableProviderInstance,
   resolveProviderDriverKindForInstanceSelection,
+  REARVY_ROUTER_ENTRY,
+  withRearvyRouterEntry,
 } from "./providerInstances";
 
 function provider(input: {
@@ -507,5 +509,43 @@ describe("resolveDefaultProviderModelSelection", () => {
         null,
       ),
     ).toBeNull();
+  });
+});
+
+describe("withRearvyRouterEntry", () => {
+  const readyCodex = deriveProviderInstanceEntries([
+    provider({
+      provider: ProviderDriverKind.make("codex"),
+      instanceId: "codex",
+      models: [model("gpt-5.6-sol")],
+    }),
+  ]);
+
+  it("leads the picker, ahead of every configured agent", () => {
+    const entries = withRearvyRouterEntry(readyCodex);
+
+    expect(entries[0]).toBe(REARVY_ROUTER_ENTRY);
+    expect(entries.map((entry) => entry.instanceId)).toEqual(["rearvy_router", "codex"]);
+  });
+
+  it("stays out of the picker when there is nothing to route to", () => {
+    const nothingReady = deriveProviderInstanceEntries([
+      provider({
+        provider: ProviderDriverKind.make("codex"),
+        instanceId: "codex",
+        status: "error",
+      }),
+      provider({
+        provider: ProviderDriverKind.make("claudeAgent"),
+        instanceId: "claudeAgent",
+        enabled: false,
+      }),
+    ]);
+
+    expect(withRearvyRouterEntry(nothingReady)).toEqual(nothingReady);
+  });
+
+  it("offers exactly one row, so the choice is Rearvy and not a model", () => {
+    expect(REARVY_ROUTER_ENTRY.models.map((entry) => entry.slug)).toEqual(["rearvy-auto"]);
   });
 });

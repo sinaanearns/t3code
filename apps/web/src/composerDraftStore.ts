@@ -12,6 +12,8 @@ import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   PreviewAnnotationPayloadSchema,
   type PreviewAnnotationPayload,
+  isRearvyRouterInstanceId,
+  REARVY_ROUTER_MODEL,
   RuntimeMode,
   type ServerProvider,
   type ScopedProjectRef,
@@ -1091,6 +1093,13 @@ export function deriveEffectiveComposerModelState(input: {
   projectModelSelection: ModelSelection | null | undefined;
   settings: UnifiedSettings;
 }): EffectiveComposerModelState {
+  // Rearvy has exactly one row and no catalog behind it — the whole point is
+  // that the model is not chosen yet. Resolving it through the provider
+  // snapshots would find no instance and fall back to some other agent's
+  // default, which is the one answer that would be wrong here.
+  if (isRearvyRouterInstanceId(input.selectedInstanceId)) {
+    return { selectedModel: REARVY_ROUTER_MODEL, modelOptions: null };
+  }
   const baseModelCandidate =
     input.threadModelSelection?.model ?? input.projectModelSelection?.model ?? null;
   const preserveThreadModel =

@@ -59,9 +59,11 @@ export function ProviderIcon(props: ProviderIconProps) {
     );
   }
 
-  if (props.provider === "rearvy") {
+  if (props.provider === "rearvyRouter") {
     // Rearvy ships only a raster logo, so this mirrors the web app's vector of
     // it: body filled, with the tilted eye and lower-left dot knocked out.
+    // The kind is the router's, not a provider's — Rearvy chooses an agent
+    // here, it is not one.
     return (
       <Svg width={size} height={size} viewBox="0 0 32 32" fill="none">
         <Path

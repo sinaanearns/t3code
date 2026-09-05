@@ -23,6 +23,23 @@ On mobile, the model picker shows each OpenCode model's upstream provider, such 
 GitHub Copilot, or OpenCode Zen, beneath its name. Search by that provider name to narrow the list
 when starting a thread or changing an existing thread's model.
 
+## Rearvy
+
+**Rearvy** sits at the top of the model picker. It is not an agent of its own — it is what you pick
+when you would rather not pick. With Rearvy selected, each message you send is read first, then
+handed to whichever installed agent suits it, on the model that suits it, and the turn runs there.
+
+Rearvy only ever chooses among the agents already installed and working on that machine. It appears
+in the picker once at least one of them is ready, and never routes to one that is missing, switched
+off, or failing its health check.
+
+Once a thread has started, its agent is fixed — that is true however the agent was chosen. Rearvy
+stays selectable in a started thread, where it goes on choosing the model for each message inside
+the agent already serving it.
+
+If Rearvy cannot reach a decision, nothing is sent and your draft is left untouched, so you can send
+again or choose an agent yourself.
+
 ## Prompt stash
 
 Use the default shortcut, `Cmd+S` on macOS or `Ctrl+S` on Windows and Linux, to stash the current

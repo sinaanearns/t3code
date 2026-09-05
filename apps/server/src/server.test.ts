@@ -122,6 +122,7 @@ import { ThreadDeletionReactor } from "./orchestration/Services/ThreadDeletionRe
 import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import { PersistenceSqlError } from "./persistence/Errors.ts";
 import * as ProviderRegistry from "./provider/Services/ProviderRegistry.ts";
+import { RearvyRouter } from "./provider/RearvyRouter.ts";
 import * as ProviderService from "./provider/Services/ProviderService.ts";
 import { ProviderAdapterRequestError } from "./provider/Errors.ts";
 import { makeManualOnlyProviderMaintenanceCapabilities } from "./provider/providerMaintenance.ts";
@@ -398,6 +399,7 @@ const buildAppUnderTest = (options?: {
     keybindings?: Partial<Keybindings.Keybindings["Service"]>;
     environmentTheme?: Partial<EnvironmentTheme.EnvironmentThemeService["Service"]>;
     providerRegistry?: Partial<ProviderRegistry.ProviderRegistry["Service"]>;
+    rearvyRouter?: Partial<RearvyRouter["Service"]>;
     providerService?: Partial<ProviderService.ProviderService["Service"]>;
     serverSettings?: Partial<ServerSettings.ServerSettingsService["Service"]>;
     externalLauncher?: Partial<ExternalLauncher.ExternalLauncher["Service"]>;
@@ -665,6 +667,10 @@ const buildAppUnderTest = (options?: {
           Layer.mock(ProviderService.ProviderService)({
             uploadFeedback: () => Effect.die("Provider feedback is not stubbed in this test"),
             ...options?.layers?.providerService,
+          }),
+          Layer.mock(RearvyRouter)({
+            route: () => Effect.die("Rearvy routing is not stubbed in this test"),
+            ...options?.layers?.rearvyRouter,
           }),
         ),
       ),

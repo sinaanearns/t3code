@@ -168,15 +168,15 @@ export interface CodexSessionRuntimeOptions {
   readonly appServerArgs?: ReadonlyArray<string>;
   /**
    * Model to fall back to when a turn arrives without one. Drivers that reuse
-   * this runtime against a non-OpenAI backend (Rearvy) must supply their own,
-   * or an unmodelled turn would name a Codex slug their API does not serve.
+   * this runtime against a non-OpenAI backend must supply their own, or an
+   * unmodelled turn would name a Codex slug their API does not serve.
    */
   readonly fallbackModel?: string;
   /**
    * Driver kind the sessions and events this runtime emits are stamped with.
    * Defaults to `codex`. Drivers that reuse this runtime as their harness
-   * (Rearvy) supply their own kind so a thread opened against them reports the
-   * provider the user actually picked, not the harness it happens to run on.
+   * supply their own kind so a thread opened against them reports the provider
+   * the user actually picked, not the harness it happens to run on.
    */
   readonly provider?: ProviderDriverKind;
 }
